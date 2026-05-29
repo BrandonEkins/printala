@@ -407,14 +407,22 @@ export class Preview3D {
       if (geometries.length > 0) {
         try {
           const mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
-          const layerMesh = new THREE.Mesh(mergedGeo, activeMaterial);
+          let finalGeo = mergedGeo;
+          if (THREE.BufferGeometryUtils.weld) {
+            try {
+              finalGeo = THREE.BufferGeometryUtils.weld(mergedGeo);
+            } catch (err) {
+              console.warn("Welding failed for layer:", err);
+            }
+          }
+          const layerMesh = new THREE.Mesh(finalGeo, activeMaterial);
           layerMesh.name = `Layer_${layer.name.replace(/\s+/g, '_')}`;
           layerMesh.castShadow = true;
           layerMesh.receiveShadow = true;
           
-          // If we have a base plate, shift strokes UP by base thickness so they sit on top of the plate
+          // Shift UP by base thickness minus a small overlap (0.05 mm) to prevent coplanar touching faces
           if (baseType !== 'none' && baseThickness > 0) {
-            layerMesh.position.z = baseThickness;
+            layerMesh.position.z = baseThickness - 0.05;
           }
           
           this.mandalaGroup.add(layerMesh);
@@ -500,7 +508,15 @@ export class Preview3D {
           if (geometries.length > 0) {
             try {
               const mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
-              const conformingMesh = new THREE.Mesh(mergedGeo, activeMaterial);
+              let finalGeo = mergedGeo;
+              if (THREE.BufferGeometryUtils.weld) {
+                try {
+                  finalGeo = THREE.BufferGeometryUtils.weld(mergedGeo);
+                } catch (err) {
+                  console.warn("Welding failed for conforming base:", err);
+                }
+              }
+              const conformingMesh = new THREE.Mesh(finalGeo, activeMaterial);
               conformingMesh.name = "Base_Plate";
               conformingMesh.castShadow = true;
               conformingMesh.receiveShadow = true;
@@ -597,10 +613,16 @@ export class Preview3D {
         // Add hanging hole if enabled
         if (basePlateSettings.addHole && basePlateSettings.holeSize > 0) {
           const holeRadius = basePlateSettings.holeSize / 2;
-          const topRadius = smoothedR[90] + baseBorder;
-          const holeY = Math.max(holeRadius * 2, topRadius - basePlateSettings.holeDistance);
+          const angleDeg = basePlateSettings.holeAngle !== undefined ? basePlateSettings.holeAngle : 90;
+          const theta = (angleDeg * Math.PI) / 180;
+          let bin = Math.floor((angleDeg / 360) * 360) % 360;
+          if (bin < 0) bin += 360;
+          const boundaryRadius = smoothedR[bin] + baseBorder;
+          const holeDist = Math.max(holeRadius * 2, boundaryRadius - basePlateSettings.holeDistance);
+          const holeX = Math.cos(theta) * holeDist;
+          const holeY = Math.sin(theta) * holeDist;
           const holePath = new THREE.Path();
-          holePath.absarc(0, holeY, holeRadius, 0, Math.PI * 2, true); // clockwise for subtraction
+          holePath.absarc(holeX, holeY, holeRadius, 0, Math.PI * 2, true); // clockwise for subtraction
           shape.holes.push(holePath);
         }
         
@@ -643,9 +665,13 @@ export class Preview3D {
         // Add hanging hole if enabled
         if (basePlateSettings.addHole && basePlateSettings.holeSize > 0) {
           const holeRadius = basePlateSettings.holeSize / 2;
-          const holeY = Math.max(holeRadius * 2, baseRadius - basePlateSettings.holeDistance);
+          const angleDeg = basePlateSettings.holeAngle !== undefined ? basePlateSettings.holeAngle : 90;
+          const theta = (angleDeg * Math.PI) / 180;
+          const holeDist = Math.max(holeRadius * 2, baseRadius - basePlateSettings.holeDistance);
+          const holeX = Math.cos(theta) * holeDist;
+          const holeY = Math.sin(theta) * holeDist;
           const holePath = new THREE.Path();
-          holePath.absarc(0, holeY, holeRadius, 0, Math.PI * 2, true); // clockwise for subtraction
+          holePath.absarc(holeX, holeY, holeRadius, 0, Math.PI * 2, true); // clockwise for subtraction
           shape.holes.push(holePath);
         }
         
@@ -940,6 +966,7 @@ export class Preview3D {
       const geom = mesh.geometry;
       const name = mesh.name || "Object";
       
+      objText += `g ${name}\n`;
       objText += `o ${name}\n`;
       
       const positionAttr = geom.attributes.position;

@@ -97,6 +97,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const valBaseHoleSize = document.getElementById('val-base-hole-size');
   const baseHoleDistanceSlider = document.getElementById('base-hole-distance');
   const valBaseHoleDistance = document.getElementById('val-base-hole-distance');
+  const baseHoleAngleSlider = document.getElementById('base-hole-angle');
+  const valBaseHoleAngle = document.getElementById('val-base-hole-angle');
   const selectMaterial = document.getElementById('render-material');
   const chkShowBed = document.getElementById('chk-show-bed');
   const scaleSlider = document.getElementById('mandala-scale');
@@ -404,7 +406,8 @@ document.addEventListener('DOMContentLoaded', () => {
         border: borderOffset,
         addHole: isSolidBase && chkBaseHole && chkBaseHole.checked,
         holeSize: chkBaseHole ? parseFloat(baseHoleSizeSlider.value) : 0,
-        holeDistance: chkBaseHole ? parseFloat(baseHoleDistanceSlider.value) : 0
+        holeDistance: chkBaseHole ? parseFloat(baseHoleDistanceSlider.value) : 0,
+        holeAngle: chkBaseHole ? parseFloat(baseHoleAngleSlider.value) : 90
       };
       
       preview3D.updateModel(mandala, basePlate, overallScale);
@@ -710,6 +713,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (baseHoleDistanceSlider) {
       baseHoleDistanceSlider.addEventListener('input', (e) => {
         valBaseHoleDistance.textContent = parseFloat(e.target.value).toFixed(1) + ' mm';
+        update3DPreview();
+      });
+    }
+
+    if (baseHoleAngleSlider) {
+      baseHoleAngleSlider.addEventListener('input', (e) => {
+        valBaseHoleAngle.textContent = e.target.value + '°';
         update3DPreview();
       });
     }
