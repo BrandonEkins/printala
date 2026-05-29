@@ -249,6 +249,7 @@
                   <option value="circle" selected>Circular Disk</option>
                   <option value="hexagon">Hexagon</option>
                   <option value="octagon">Octagon</option>
+                  <option value="conforming">Conforming (Outline backing)</option>
                 </select>
               </div>
 
@@ -262,11 +263,19 @@
 
               <div class="control-row base-plate-control">
                 <div class="control-label">
+                  <label for="base-border">Base Border (Offset)</label>
+                  <span id="val-base-border">2.0 mm</span>
+                </div>
+                <input type="range" id="base-border" min="0.0" max="10.0" value="2.0" step="0.5">
+              </div>
+
+              <div class="control-row base-plate-control radius-control-card">
+                <div class="control-label">
                   <label for="base-radius">Base Size (Radius)</label>
                   <span id="val-base-radius">45.0 mm</span>
                 </div>
-                <input type="range" id="base-radius" min="10.0" max="60.0" value="45.0" step="1.0">
-                <label class="toggle-switch" style="margin-top: 4px; font-size: 11px;">
+                <input type="range" id="base-radius" min="10.0" max="300.0" value="45.0" step="1.0">
+                <label class="toggle-switch" style="margin-top: 6px; font-size: 11px;">
                   <input type="checkbox" id="chk-auto-base-radius" checked>
                   <span class="toggle-slider"></span>
                   Auto-scale to fit drawing

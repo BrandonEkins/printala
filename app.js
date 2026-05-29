@@ -85,6 +85,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectBaseType = document.getElementById('base-type');
   const baseThicknessSlider = document.getElementById('base-thickness');
   const valBaseThickness = document.getElementById('val-base-thickness');
+  const baseBorderSlider = document.getElementById('base-border');
+  const valBaseBorder = document.getElementById('val-base-border');
   const baseRadiusSlider = document.getElementById('base-radius');
   const valBaseRadius = document.getElementById('val-base-radius');
   const chkAutoBaseRadius = document.getElementById('chk-auto-base-radius');
@@ -319,17 +321,41 @@ document.addEventListener('DOMContentLoaded', () => {
     // Yield execution slightly to allow spinner to draw
     setTimeout(() => {
       const overallScale = parseInt(scaleSlider.value);
+      const baseType = selectBaseType.value;
+      const borderOffset = parseFloat(baseBorderSlider.value);
       
       // Allow base radius up to 300mm
       baseRadiusSlider.max = 300;
       
-      if (chkAutoBaseRadius && chkAutoBaseRadius.checked) {
+      // UI feedback: disable/dim controls based on shape
+      const radiusCard = document.querySelector('.radius-control-card');
+      const basePlateControls = document.querySelectorAll('.base-plate-control');
+      
+      if (baseType === 'none') {
+        basePlateControls.forEach(ctrl => {
+          ctrl.style.opacity = '0.3';
+          ctrl.style.pointerEvents = 'none';
+        });
+      } else {
+        basePlateControls.forEach(ctrl => {
+          ctrl.style.opacity = '1';
+          ctrl.style.pointerEvents = 'auto';
+        });
+        
+        // If conforming, base radius is not used - dim it
+        if (baseType === 'conforming' && radiusCard) {
+          radiusCard.style.opacity = '0.3';
+          radiusCard.style.pointerEvents = 'none';
+        }
+      }
+      
+      if (chkAutoBaseRadius && chkAutoBaseRadius.checked && baseType !== 'conforming') {
         const maxDrawnRadius = calculateMaxDrawnRadius();
         
         let calculatedRadius;
         if (maxDrawnRadius > 0) {
-          // Pad by 2mm and round up to keep plate boundary slightly wider than drawings
-          calculatedRadius = Math.max(10, Math.ceil(maxDrawnRadius + 2.0));
+          // Pad by custom border offset and round up to keep plate boundary slightly wider than drawings
+          calculatedRadius = Math.max(10, Math.ceil(maxDrawnRadius + borderOffset));
         } else {
           // Safe default if drawing is empty (45% of overall scale radius)
           calculatedRadius = Math.max(10, Math.round(overallScale * 0.45));
@@ -342,9 +368,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       
       const basePlate = {
-        type: selectBaseType.value,
+        type: baseType,
         thickness: parseFloat(baseThicknessSlider.value),
-        radius: parseFloat(baseRadiusSlider.value)
+        radius: parseFloat(baseRadiusSlider.value),
+        border: borderOffset
       };
       
       preview3D.updateModel(mandala, basePlate, overallScale);
@@ -587,18 +614,17 @@ document.addEventListener('DOMContentLoaded', () => {
       preview3D.isAutoRotating = e.target.checked;
     });
 
-    selectBaseType.addEventListener('change', (e) => {
-      const controls = document.querySelectorAll('.base-plate-control');
-      if (e.target.value === 'none') {
-        controls.forEach(ctrl => ctrl.style.opacity = '0.3');
-      } else {
-        controls.forEach(ctrl => ctrl.style.opacity = '1');
-      }
+    selectBaseType.addEventListener('change', () => {
       update3DPreview();
     });
 
     baseThicknessSlider.addEventListener('input', (e) => {
       valBaseThickness.textContent = parseFloat(e.target.value).toFixed(1) + ' mm';
+      update3DPreview();
+    });
+
+    baseBorderSlider.addEventListener('input', (e) => {
+      valBaseBorder.textContent = parseFloat(e.target.value).toFixed(1) + ' mm';
       update3DPreview();
     });
 

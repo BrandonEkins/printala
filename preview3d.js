@@ -235,6 +235,11 @@ export class Preview3D {
     // Scale factor to map 1000px canvas to real physical units (mm)
     const scaleFactor = overallScale / 1000;
     
+    const baseType = basePlateSettings.type;
+    const baseThickness = parseFloat(basePlateSettings.thickness) || 0;
+    const baseRadius = parseFloat(basePlateSettings.radius) || 0;
+    const baseBorder = parseFloat(basePlateSettings.border) || 0;
+    
     // 1. Build Extruded Mandala Strokes
     mandala.layers.forEach((layer) => {
       if (!layer.visible || layer.strokes.length === 0) return;
@@ -316,6 +321,12 @@ export class Preview3D {
           const layerMesh = new THREE.Mesh(mergedGeo, activeMaterial);
           layerMesh.castShadow = true;
           layerMesh.receiveShadow = true;
+          
+          // If we have a base plate, shift strokes UP by base thickness so they sit on top of the plate
+          if (baseType !== 'none' && baseThickness > 0) {
+            layerMesh.position.z = baseThickness;
+          }
+          
           this.mandalaGroup.add(layerMesh);
         } catch (e) {
           console.error("Error merging geometries for layer:", e);
@@ -326,30 +337,105 @@ export class Preview3D {
       }
     });
     
-    // 2. Build Base Plate (solid backing)
-    const baseType = basePlateSettings.type;
-    const baseThickness = parseFloat(basePlateSettings.thickness);
-    const baseRadius = parseFloat(basePlateSettings.radius);
-    
-    if (baseType !== 'none' && baseThickness > 0 && baseRadius > 0) {
-      let segments = 32;
-      if (baseType === 'hexagon') segments = 6;
-      else if (baseType === 'octagon') segments = 8;
-      
-      const baseGeo = new THREE.CylinderGeometry(baseRadius, baseRadius, baseThickness, segments);
-      baseGeo.rotateX(Math.PI / 2); // Align height along Z
-      
-      const baseMesh = new THREE.Mesh(baseGeo, activeMaterial);
-      baseMesh.position.set(0, 0, baseThickness / 2);
-      baseMesh.castShadow = true;
-      baseMesh.receiveShadow = true;
-      
-      // Shift all stroke meshes UP by base thickness so they sit on top of the base plate
-      this.mandalaGroup.children.forEach(mesh => {
-        mesh.position.z += baseThickness;
-      });
-      
-      this.mandalaGroup.add(baseMesh);
+    // 2. Build Base Plate (solid backing or conforming outline backing)
+    if (baseType !== 'none' && baseThickness > 0) {
+      if (baseType === 'conforming') {
+        // Conforming backing: duplicate all strokes with an expanded brush size
+        mandala.layers.forEach((layer) => {
+          if (!layer.visible || layer.strokes.length === 0) return;
+          
+          const S = layer.symmetry;
+          const mirror = layer.mirror;
+          
+          // Expanded brush radius in mm: (brushSize + 2 * borderOffset) / 2
+          const expandedBrushRadius = ((layer.brushSize + 2 * baseBorder) * scaleFactor * 10) / 2;
+          
+          const geometries = [];
+          
+          const baseCylinder = new THREE.CylinderGeometry(expandedBrushRadius, expandedBrushRadius, baseThickness, 8);
+          baseCylinder.rotateX(Math.PI / 2);
+          
+          const baseBox = new THREE.BoxGeometry(1, 1, 1);
+          
+          layer.strokes.forEach((stroke) => {
+            let pts = [];
+            let isClosed = false;
+            
+            if (stroke.type === 'freehand') {
+              pts = stroke.points.map(p => ({ x: p.x * scaleFactor, y: p.y * scaleFactor }));
+              isClosed = false;
+            } else if (stroke.type === 'line') {
+              pts = [
+                { x: stroke.x1 * scaleFactor, y: stroke.y1 * scaleFactor },
+                { x: stroke.x2 * scaleFactor, y: stroke.y2 * scaleFactor }
+              ];
+              isClosed = false;
+            } else if (stroke.type === 'circle') {
+              const cx = stroke.cx * scaleFactor;
+              const cy = stroke.cy * scaleFactor;
+              const r = stroke.r * scaleFactor;
+              const numSegs = Math.max(16, Math.floor(r * 1.5));
+              for (let j = 0; j < numSegs; j++) {
+                const a = (j * Math.PI * 2) / numSegs;
+                pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+              }
+              isClosed = true;
+            } else if (stroke.type === 'polygon') {
+              const cx = stroke.cx * scaleFactor;
+              const cy = stroke.cy * scaleFactor;
+              const r = stroke.r * scaleFactor;
+              const sides = stroke.sides;
+              const angle = stroke.angle || 0;
+              for (let j = 0; j < sides; j++) {
+                const a = angle + (j * Math.PI * 2) / sides;
+                pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+              }
+              isClosed = true;
+            }
+            
+            if (pts.length < 2) return;
+            
+            for (let i = 0; i < S; i++) {
+              const rotateAngle = (i * Math.PI * 2) / S;
+              this.addStrokeGeometries(geometries, pts, isClosed, rotateAngle, false, expandedBrushRadius, baseThickness, baseBox, baseCylinder);
+              if (mirror && S > 1) {
+                this.addStrokeGeometries(geometries, pts, isClosed, rotateAngle, true, expandedBrushRadius, baseThickness, baseBox, baseCylinder);
+              }
+            }
+          });
+          
+          baseCylinder.dispose();
+          baseBox.dispose();
+          
+          if (geometries.length > 0) {
+            try {
+              const mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
+              const conformingMesh = new THREE.Mesh(mergedGeo, activeMaterial);
+              conformingMesh.castShadow = true;
+              conformingMesh.receiveShadow = true;
+              // Placed at z = 0 (bottom of strokes)
+              this.mandalaGroup.add(conformingMesh);
+            } catch (e) {
+              console.error("Error creating conforming base:", e);
+            }
+            geometries.forEach(geo => geo.dispose());
+          }
+        });
+      } else if (baseRadius > 0) {
+        // Classic solid shape base plate (circle, hexagon, octagon)
+        let segments = 32;
+        if (baseType === 'hexagon') segments = 6;
+        else if (baseType === 'octagon') segments = 8;
+        
+        const baseGeo = new THREE.CylinderGeometry(baseRadius, baseRadius, baseThickness, segments);
+        baseGeo.rotateX(Math.PI / 2); // Align height along Z
+        
+        const baseMesh = new THREE.Mesh(baseGeo, activeMaterial);
+        baseMesh.position.set(0, 0, baseThickness / 2);
+        baseMesh.castShadow = true;
+        baseMesh.receiveShadow = true;
+        this.mandalaGroup.add(baseMesh);
+      }
     }
     
     // 3. Update UI Metadata info

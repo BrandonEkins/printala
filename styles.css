@@ -845,3 +845,13 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .tab-pane.active {
   display: flex;
 }
+
+/* Highlighted radius option card */
+.radius-control-card {
+  border: 1px dashed rgba(236, 72, 153, 0.3) !important;
+  background: rgba(236, 72, 153, 0.03) !important;
+  padding: 12px !important;
+  border-radius: var(--border-radius-sm) !important;
+  margin-top: 4px !important;
+  box-shadow: inset 0 0 8px rgba(236, 72, 153, 0.05);
+}
