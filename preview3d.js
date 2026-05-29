@@ -219,6 +219,95 @@ export class Preview3D {
     this.controls.update();
   }
 
+  // Helper to dense-sample all drawn coordinates from the mandala design (including symmetries)
+  getDrawnPoints(mandala, scaleFactor) {
+    const points = [];
+    
+    mandala.layers.forEach((layer) => {
+      if (!layer.visible || layer.strokes.length === 0) return;
+      
+      const S = layer.symmetry;
+      const mirror = layer.mirror;
+      const halfBrush = (layer.brushSize * scaleFactor * 10) / 2; // Half brush size in physical mm
+      
+      layer.strokes.forEach((stroke) => {
+        let strokePts = [];
+        
+        if (stroke.type === 'freehand') {
+          strokePts = stroke.points.map(p => ({ x: p.x * scaleFactor, y: p.y * scaleFactor }));
+        } else if (stroke.type === 'line') {
+          const p1 = { x: stroke.x1 * scaleFactor, y: stroke.y1 * scaleFactor };
+          const p2 = { x: stroke.x2 * scaleFactor, y: stroke.y2 * scaleFactor };
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          const steps = Math.max(2, Math.ceil(len / 0.5)); // Sample every 0.5 mm
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            strokePts.push({ x: p1.x + dx * t, y: p1.y + dy * t });
+          }
+        } else if (stroke.type === 'circle') {
+          const cx = stroke.cx * scaleFactor;
+          const cy = stroke.cy * scaleFactor;
+          const r = stroke.r * scaleFactor;
+          const numSegs = Math.max(32, Math.floor(r * 3));
+          for (let j = 0; j <= numSegs; j++) {
+            const a = (j * Math.PI * 2) / numSegs;
+            strokePts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+          }
+        } else if (stroke.type === 'polygon') {
+          const cx = stroke.cx * scaleFactor;
+          const cy = stroke.cy * scaleFactor;
+          const r = stroke.r * scaleFactor;
+          const sides = stroke.sides;
+          const angle = stroke.angle || 0;
+          for (let j = 0; j < sides; j++) {
+            const a1 = angle + (j * Math.PI * 2) / sides;
+            const a2 = angle + ((j + 1) * Math.PI * 2) / sides;
+            const p1 = { x: cx + Math.cos(a1) * r, y: cy + Math.sin(a1) * r };
+            const p2 = { x: cx + Math.cos(a2) * r, y: cy + Math.sin(a2) * r };
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            const steps = Math.max(2, Math.ceil(len / 0.5));
+            for (let k = 0; k <= steps; k++) {
+              const t = k / steps;
+              strokePts.push({ x: p1.x + dx * t, y: p1.y + dy * t });
+            }
+          }
+        }
+        
+        // Generate symmetric coordinates for all points in the stroke
+        strokePts.forEach(pt => {
+          for (let i = 0; i < S; i++) {
+            const rotateAngle = (i * Math.PI * 2) / S;
+            const cosA = Math.cos(rotateAngle);
+            const sinA = Math.sin(rotateAngle);
+            
+            // Original orientation point
+            points.push({
+              x: pt.x * cosA - pt.y * sinA,
+              y: pt.x * sinA + pt.y * cosA,
+              halfBrush: halfBrush
+            });
+            
+            // Mirrored orientation point
+            if (mirror && S > 1) {
+              const my = -pt.y;
+              points.push({
+                x: pt.x * cosA - my * sinA,
+                y: pt.x * sinA + my * cosA,
+                halfBrush: halfBrush
+              });
+            }
+          }
+        });
+      });
+    });
+    
+    return points;
+  }
+
   // Extrude the 2D mandala layout into a 3D model
   updateModel(mandala, basePlateSettings, overallScale = 100) {
     const THREE = window.THREE;
@@ -339,7 +428,7 @@ export class Preview3D {
     
     // 2. Build Base Plate (solid backing or conforming outline backing)
     if (baseType !== 'none' && baseThickness > 0) {
-      if (baseType === 'conforming') {
+      if (baseType === 'conforming-outline') {
         // Conforming backing: duplicate all strokes with an expanded brush size
         mandala.layers.forEach((layer) => {
           if (!layer.visible || layer.strokes.length === 0) return;
@@ -421,6 +510,100 @@ export class Preview3D {
             geometries.forEach(geo => geo.dispose());
           }
         });
+      } else if (baseType === 'conforming-solid') {
+        // Conforming solid backing: create a solid fill backing that covers all interior areas
+        const numBins = 360;
+        const r_samples = new Array(numBins).fill(0);
+        const drawnPoints = this.getDrawnPoints(mandala, scaleFactor);
+        
+        drawnPoints.forEach(pt => {
+          const dist = Math.sqrt(pt.x * pt.x + pt.y * pt.y);
+          const r = dist + pt.halfBrush;
+          let angle = Math.atan2(pt.y, pt.x);
+          if (angle < 0) angle += Math.PI * 2;
+          
+          const bin = Math.floor((angle / (Math.PI * 2)) * numBins) % numBins;
+          if (r > r_samples[bin]) {
+            r_samples[bin] = r;
+          }
+        });
+        
+        // Interpolate empty bins
+        for (let i = 0; i < numBins; i++) {
+          if (r_samples[i] === 0) {
+            let leftVal = 0;
+            let leftDist = 0;
+            for (let d = 1; d < numBins; d++) {
+              const idx = (i - d + numBins) % numBins;
+              if (r_samples[idx] > 0) {
+                leftVal = r_samples[idx];
+                leftDist = d;
+                break;
+              }
+            }
+            
+            let rightVal = 0;
+            let rightDist = 0;
+            for (let d = 1; d < numBins; d++) {
+              const idx = (i + d) % numBins;
+              if (r_samples[idx] > 0) {
+                rightVal = r_samples[idx];
+                rightDist = d;
+                break;
+              }
+            }
+            
+            if (leftVal > 0 && rightVal > 0) {
+              const totalDist = leftDist + rightDist;
+              r_samples[i] = (leftVal * rightDist + rightVal * leftDist) / totalDist;
+            } else if (leftVal > 0) {
+              r_samples[i] = leftVal;
+            } else if (rightVal > 0) {
+              r_samples[i] = rightVal;
+            } else {
+              r_samples[i] = 10; // Fallback default if drawing is empty
+            }
+          }
+        }
+        
+        // Smooth the radii array to make the outer edge look organic and smooth
+        const smoothedR = new Array(numBins);
+        const windowSize = 5;
+        const halfWin = Math.floor(windowSize / 2);
+        for (let i = 0; i < numBins; i++) {
+          let sum = 0;
+          for (let w = -halfWin; w <= halfWin; w++) {
+            const idx = (i + w + numBins) % numBins;
+            sum += r_samples[idx];
+          }
+          smoothedR[i] = sum / windowSize;
+        }
+        
+        // Generate shape points
+        const shape = new THREE.Shape();
+        const startAngle = 0;
+        const startR = smoothedR[0] + baseBorder;
+        shape.moveTo(Math.cos(startAngle) * startR, Math.sin(startAngle) * startR);
+        
+        for (let i = 1; i < numBins; i++) {
+          const angle = (i * Math.PI * 2) / numBins;
+          const r = smoothedR[i] + baseBorder;
+          shape.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+        }
+        shape.closePath();
+        
+        const extrudeSettings = {
+          depth: baseThickness,
+          bevelEnabled: false
+        };
+        const baseGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        
+        const baseMesh = new THREE.Mesh(baseGeo, activeMaterial);
+        baseMesh.castShadow = true;
+        baseMesh.receiveShadow = true;
+        
+        // Placed at z = 0 (bottom of strokes)
+        this.mandalaGroup.add(baseMesh);
       } else if (baseRadius > 0) {
         // Classic solid shape base plate (circle, hexagon, octagon)
         let segments = 32;

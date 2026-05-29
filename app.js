@@ -343,13 +343,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         // If conforming, base radius is not used - dim it
-        if (baseType === 'conforming' && radiusCard) {
+        if (baseType.startsWith('conforming') && radiusCard) {
           radiusCard.style.opacity = '0.3';
           radiusCard.style.pointerEvents = 'none';
         }
       }
       
-      if (chkAutoBaseRadius && chkAutoBaseRadius.checked && baseType !== 'conforming') {
+      if (chkAutoBaseRadius && chkAutoBaseRadius.checked && !baseType.startsWith('conforming')) {
         const maxDrawnRadius = calculateMaxDrawnRadius();
         
         let calculatedRadius;
