@@ -320,9 +320,8 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
       const overallScale = parseInt(scaleSlider.value);
       
-      // Update baseRadiusSlider range max dynamically based on print diameter radius
-      const maxAllowedRadius = overallScale / 2;
-      baseRadiusSlider.max = maxAllowedRadius;
+      // Allow base radius up to 300mm
+      baseRadiusSlider.max = 300;
       
       if (chkAutoBaseRadius && chkAutoBaseRadius.checked) {
         const maxDrawnRadius = calculateMaxDrawnRadius();
@@ -336,10 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
           calculatedRadius = Math.max(10, Math.round(overallScale * 0.45));
         }
         
-        // Cap within allowed bounds
-        calculatedRadius = Math.min(maxAllowedRadius, calculatedRadius);
-        
-        console.log(`Auto-Scale: maxDrawnRadius = ${maxDrawnRadius.toFixed(2)} mm, setting base radius = ${calculatedRadius} mm (max allowed = ${maxAllowedRadius} mm)`);
+        console.log(`Auto-Scale: maxDrawnRadius = ${maxDrawnRadius.toFixed(2)} mm, setting base radius = ${calculatedRadius} mm`);
         
         baseRadiusSlider.value = calculatedRadius;
         valBaseRadius.textContent = calculatedRadius.toFixed(1) + ' mm';
