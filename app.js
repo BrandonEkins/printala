@@ -1,6 +1,6 @@
 // Mandala Application Orchestrator
 
-import { Mandala } from './mandala.js';
+import { Mandala, smoothPoints } from './mandala.js';
 import { Preview3D } from './preview3d.js';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -70,6 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const valLayerBrush = document.getElementById('val-layer-brush-size');
   const layerHeightSlider = document.getElementById('layer-height');
   const valLayerHeight = document.getElementById('val-layer-height');
+  const layerSmoothingSlider = document.getElementById('layer-smoothing');
+  const valLayerSmoothing = document.getElementById('val-layer-smoothing');
   const customColorPicker = document.getElementById('layer-color');
   const colorSwatches = document.querySelectorAll('.color-swatch');
   
@@ -149,7 +151,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentTool === 'freehand') {
       currentStroke = {
         type: 'freehand',
-        points: [{ x: startX, y: startY }]
+        points: [{ x: startX, y: startY }],
+        rawPoints: [{ x: startX, y: startY }]
       };
     }
   }
@@ -162,7 +165,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const curY = coords.y;
     
     if (currentTool === 'freehand') {
-      currentStroke.points.push({ x: curX, y: curY });
+      currentStroke.rawPoints.push({ x: curX, y: curY });
+      const activeLayer = mandala.getActiveLayer();
+      const smoothing = activeLayer ? activeLayer.smoothing : 0;
+      currentStroke.points = smoothPoints(currentStroke.rawPoints, smoothing);
       drawAll();
       drawTemporaryStroke();
     } else if (currentTool === 'line') {
@@ -566,6 +572,27 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
+    layerSmoothingSlider.addEventListener('input', (e) => {
+      const activeLayer = mandala.getActiveLayer();
+      if (activeLayer) {
+        activeLayer.smoothing = parseInt(e.target.value);
+        valLayerSmoothing.textContent = activeLayer.smoothing === 0 ? 'Off' : `Level ${activeLayer.smoothing}`;
+        
+        // Recalculate points of all freehand strokes in the layer using the raw points
+        activeLayer.strokes.forEach(stroke => {
+          if (stroke.type === 'freehand') {
+            if (!stroke.rawPoints) {
+              stroke.rawPoints = JSON.parse(JSON.stringify(stroke.points));
+            }
+            stroke.points = smoothPoints(stroke.rawPoints, activeLayer.smoothing);
+          }
+        });
+        
+        drawAll();
+        update3DPreview();
+      }
+    });
+
     // Add Layer Button
     btnAddLayer.addEventListener('click', () => {
       const numLayers = mandala.layers.length;
@@ -767,6 +794,9 @@ document.addEventListener('DOMContentLoaded', () => {
     layerHeightSlider.value = activeLayer.height;
     valLayerHeight.textContent = activeLayer.height.toFixed(1) + ' mm';
     
+    layerSmoothingSlider.value = activeLayer.smoothing;
+    valLayerSmoothing.textContent = activeLayer.smoothing === 0 ? 'Off' : `Level ${activeLayer.smoothing}`;
+    
     customColorPicker.value = activeLayer.brushColor;
     
     // Highlight swatch matching active layer color
@@ -887,7 +917,8 @@ document.addEventListener('DOMContentLoaded', () => {
           
           importedStrokes.push({
             type: 'freehand',
-            points: points
+            points: points,
+            rawPoints: JSON.parse(JSON.stringify(points))
           });
         }
       } catch (err) {

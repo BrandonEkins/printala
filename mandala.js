@@ -1,5 +1,39 @@
 // Mandala State & 2D Drawing Manager
 
+// Moving average line smoothing helper
+export function smoothPoints(pts, windowSize) {
+  if (!pts || pts.length < 3 || windowSize <= 0) {
+    return pts ? pts.map(p => ({ x: p.x, y: p.y })) : [];
+  }
+  
+  const smoothed = [];
+  const len = pts.length;
+  
+  // Keep start point
+  smoothed.push({ x: pts[0].x, y: pts[0].y });
+  
+  for (let i = 1; i < len - 1; i++) {
+    let sumX = 0;
+    let sumY = 0;
+    let count = 0;
+    
+    for (let w = -windowSize; w <= windowSize; w++) {
+      const idx = i + w;
+      if (idx >= 0 && idx < len) {
+        sumX += pts[idx].x;
+        sumY += pts[idx].y;
+        count++;
+      }
+    }
+    smoothed.push({ x: sumX / count, y: sumY / count });
+  }
+  
+  // Keep end point
+  smoothed.push({ x: pts[len - 1].x, y: pts[len - 1].y });
+  
+  return smoothed;
+}
+
 export class MandalaLayer {
   constructor(id, name, symmetry = 12, brushColor = '#ec4899', brushSize = 0.5, height = 1.0) {
     this.id = id;
@@ -10,6 +44,7 @@ export class MandalaLayer {
     this.brushSize = brushSize; // In mm (physical width)
     this.height = height; // In mm (physical thickness)
     this.visible = true;
+    this.smoothing = 0; // Default smoothing level: 0 (Off)
     this.strokes = []; // Array of stroke objects
   }
 
@@ -17,6 +52,7 @@ export class MandalaLayer {
     const copy = new MandalaLayer(this.id, this.name, this.symmetry, this.brushColor, this.brushSize, this.height);
     copy.mirror = this.mirror;
     copy.visible = this.visible;
+    copy.smoothing = this.smoothing;
     copy.strokes = JSON.parse(JSON.stringify(this.strokes));
     return copy;
   }
@@ -448,7 +484,19 @@ export class Mandala {
         );
         layer.mirror = layerData.mirror !== undefined ? layerData.mirror : true;
         layer.visible = layerData.visible !== undefined ? layerData.visible : true;
-        layer.strokes = Array.isArray(layerData.strokes) ? layerData.strokes : [];
+        layer.smoothing = layerData.smoothing !== undefined ? parseInt(layerData.smoothing) : 0;
+        
+        // Upgrade strokes: ensure freehand strokes have rawPoints
+        layer.strokes = Array.isArray(layerData.strokes) ? layerData.strokes.map(stroke => {
+          if (stroke.type === 'freehand') {
+            return {
+              ...stroke,
+              rawPoints: stroke.rawPoints || JSON.parse(JSON.stringify(stroke.points))
+            };
+          }
+          return stroke;
+        }) : [];
+        
         return layer;
       });
       
