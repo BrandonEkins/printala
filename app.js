@@ -339,6 +339,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Cap within allowed bounds
         calculatedRadius = Math.min(maxAllowedRadius, calculatedRadius);
         
+        console.log(`Auto-Scale: maxDrawnRadius = ${maxDrawnRadius.toFixed(2)} mm, setting base radius = ${calculatedRadius} mm (max allowed = ${maxAllowedRadius} mm)`);
+        
         baseRadiusSlider.value = calculatedRadius;
         valBaseRadius.textContent = calculatedRadius.toFixed(1) + ' mm';
       }

@@ -1,7 +1,7 @@
 // Mandala State & 2D Drawing Manager
 
 export class MandalaLayer {
-  constructor(id, name, symmetry = 12, brushColor = '#ec4899', brushSize = 2.0, height = 1.0) {
+  constructor(id, name, symmetry = 12, brushColor = '#ec4899', brushSize = 0.5, height = 1.0) {
     this.id = id;
     this.name = name;
     this.symmetry = symmetry;
@@ -41,7 +41,7 @@ export class Mandala {
   }
 
   // Add a new layer
-  addLayer(name, symmetry = 12, brushColor = '#ec4899', brushSize = 2.0, height = 1.0) {
+  addLayer(name, symmetry = 12, brushColor = '#ec4899', brushSize = 0.5, height = 1.0) {
     const id = 'layer-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
     const newLayer = new MandalaLayer(id, name, symmetry, brushColor, brushSize, height);
     
@@ -443,7 +443,7 @@ export class Mandala {
           layerData.name || "Imported Layer",
           layerData.symmetry || 12,
           layerData.brushColor || "#ec4899",
-          layerData.brushSize || 2.0,
+          layerData.brushSize || 0.5,
           layerData.height || 1.0
         );
         layer.mirror = layerData.mirror !== undefined ? layerData.mirror : true;
