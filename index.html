@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mendala — 3D Printable Radial Designer</title>
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="Design beautiful symmetrical mandalas in 2D and instantly preview them in 3D. Export high-quality SVG vector graphics or 3D-printable STL meshes.">
+  
+  <!-- Font Integration -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  
+  <!-- App Styling -->
+  <link rel="stylesheet" href="styles.css">
+  
+  <!-- Three.js and OrbitControls via CDN (global scope setup) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo-area">
+        <svg class="logo-icon" viewBox="0 0 100 100" width="32" height="32">
+          <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="2, 2" />
+          <circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" stroke-width="3" />
+          <circle cx="50" cy="50" r="15" fill="none" stroke="currentColor" stroke-width="1.5" />
+          <path d="M 50,5 L 50,95 M 5,50 L 95,50 M 18.2,18.2 L 81.8,81.8 M 18.2,81.8 L 81.8,18.2" stroke="currentColor" stroke-width="1" opacity="0.5" />
+        </svg>
+        <div class="logo-text">
+          <h1>Mendala</h1>
+          <span>Radial 3D Print Designer</span>
+        </div>
+      </div>
+      
+      <div class="global-actions">
+        <button id="btn-undo" class="btn-icon" title="Undo (Ctrl+Z)">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"/></svg>
+        </button>
+        <button id="btn-redo" class="btn-icon" title="Redo (Ctrl+Y)">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6M3 17a9 9 0 019-9 9 9 0 016 2.3l3 2.7"/></svg>
+        </button>
+        <button id="btn-clear" class="btn-secondary" title="Clear Canvas">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          Clear
+        </button>
+        <div class="divider"></div>
+        <button id="btn-import" class="btn-secondary" title="Import Project JSON">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14.899A7 7 0 1115.71 8h1.79a4.5 4.5 0 012.5 8.242M12 12v9m-4-4l4 4 4-4"/></svg>
+          Load
+        </button>
+        <button id="btn-export-json" class="btn-secondary" title="Export Project JSON">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14.899A7 7 0 1115.71 8h1.79a4.5 4.5 0 012.5 8.242M12 21V12m-4 4l4-4 4 4"/></svg>
+          Save
+        </button>
+        <input type="file" id="import-file" accept=".json" style="display: none;">
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="app-workspace">
+      <!-- Left Panel: 2D Editor -->
+      <section class="workspace-panel panel-2d">
+        <div class="panel-header">
+          <h2>2D Canvas</h2>
+          <div class="canvas-zoom-controls">
+            <button id="btn-zoom-out" class="btn-small-icon" title="Zoom Out">-</button>
+            <span id="zoom-value">100%</span>
+            <button id="btn-zoom-in" class="btn-small-icon" title="Zoom In">+</button>
+            <button id="btn-zoom-reset" class="btn-small-icon" title="Reset Zoom">⟲</button>
+          </div>
+        </div>
+        <div class="canvas-viewport" id="canvas-container">
+          <div class="canvas-zoom-wrapper" id="canvas-zoom-wrapper">
+            <!-- Drawing Canvas -->
+            <canvas id="drawing-canvas"></canvas>
+            <!-- Helper guide canvas (for sectors, grid) -->
+            <canvas id="guide-canvas"></canvas>
+          </div>
+        </div>
+        <div class="editor-bar">
+          <div class="tool-group">
+            <button id="tool-freehand" class="btn-tool active" title="Freehand Drawing">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              <span>Freehand</span>
+            </button>
+            <button id="tool-line" class="btn-tool" title="Straight Line">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/></svg>
+              <span>Line</span>
+            </button>
+            <button id="tool-circle" class="btn-tool" title="Circle">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>
+              <span>Circle</span>
+            </button>
+            <button id="tool-polygon" class="btn-tool" title="Regular Polygon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/></svg>
+              <span>Polygon</span>
+            </button>
+            <button id="btn-import-svg" class="btn-tool" title="Import SVG File">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              <span>Import SVG</span>
+            </button>
+            <input type="file" id="import-svg-file" accept=".svg" style="display: none;">
+          </div>
+          
+          <div class="poly-sides-setting" style="display: none;">
+            <label for="poly-sides">Sides:</label>
+            <input type="number" id="poly-sides" min="3" max="12" value="5">
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Panel: 3D Preview -->
+      <section class="workspace-panel panel-3d">
+        <div class="panel-header">
+          <h2>3D Print Preview</h2>
+          <div class="preview-actions">
+            <button id="btn-reset-camera" class="btn-secondary btn-small" title="Reset Camera">Reset View</button>
+            <label class="toggle-switch">
+              <input type="checkbox" id="chk-auto-rotate">
+              <span class="toggle-slider"></span>
+              Auto Rotate
+            </label>
+          </div>
+        </div>
+        <div class="webgl-container" id="3d-container">
+          <!-- Three.js will inject canvas here -->
+          <div class="loading-overlay" id="loading-overlay">
+            <div class="spinner"></div>
+            <span>Generating 3D Mesh...</span>
+          </div>
+        </div>
+        <div class="render-info">
+          <span id="poly-count">Triangles: 0</span>
+          <span id="dimensions">Size: 100 x 100 x 4 mm</span>
+        </div>
+      </section>
+
+      <!-- Control Sidebar -->
+      <aside class="workspace-sidebar">
+        <!-- Tab Navigation (Layers vs Settings) -->
+        <div class="sidebar-tabs">
+          <button id="tab-layers" class="tab-btn active">Layers & Shapes</button>
+          <button id="tab-3d" class="tab-btn">3D & Material</button>
+        </div>
+
+        <div class="sidebar-content">
+          <!-- Layers Tab Content -->
+          <div id="tab-content-layers" class="tab-pane active">
+            <div class="section-card">
+              <div class="section-title">
+                <h3>Design Layers</h3>
+                <button id="btn-add-layer" class="btn-primary btn-small" title="Add New Layer">
+                  + Add Layer
+                </button>
+              </div>
+              
+              <div class="layers-list" id="layers-container">
+                <!-- Layers will be dynamically inserted here -->
+              </div>
+            </div>
+
+            <div class="section-card" id="layer-details-card">
+              <h3 class="section-header">Active Layer Settings</h3>
+              
+              <div class="control-row">
+                <div class="control-label">
+                  <label for="layer-symmetry">Radial Symmetry</label>
+                  <span id="val-layer-symmetry">12</span>
+                </div>
+                <input type="range" id="layer-symmetry" min="1" max="64" value="12" step="1">
+              </div>
+
+              <div class="control-row">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="layer-mirror" checked>
+                  <span class="toggle-slider"></span>
+                  Mirror Symmetry (Reflect lines)
+                </label>
+              </div>
+
+              <div class="control-row">
+                <div class="control-label">
+                  <label for="layer-brush-size">Brush Width (3D Wall)</label>
+                  <span id="val-layer-brush-size">2.0 mm</span>
+                </div>
+                <input type="range" id="layer-brush-size" min="0.5" max="8.0" value="2.0" step="0.1">
+              </div>
+
+              <div class="control-row">
+                <div class="control-label">
+                  <label for="layer-height">Extrusion Height</label>
+                  <span id="val-layer-height">4.0 mm</span>
+                </div>
+                <input type="range" id="layer-height" min="0.5" max="15.0" value="4.0" step="0.5">
+              </div>
+
+              <div class="control-row">
+                <label>Brush Color Palette</label>
+                <div class="color-palette">
+                  <div class="color-swatch active" style="background-color: #ec4899;" data-color="#ec4899"></div>
+                  <div class="color-swatch" style="background-color: #3b82f6;" data-color="#3b82f6"></div>
+                  <div class="color-swatch" style="background-color: #10b981;" data-color="#10b981"></div>
+                  <div class="color-swatch" style="background-color: #f59e0b;" data-color="#f59e0b"></div>
+                  <div class="color-swatch" style="background-color: #8b5cf6;" data-color="#8b5cf6"></div>
+                  <div class="color-swatch" style="background-color: #ffffff;" data-color="#ffffff"></div>
+                  <div class="custom-color-picker">
+                    <input type="color" id="layer-color" value="#ec4899">
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="section-card">
+              <h3>Canvas Helpers</h3>
+              <div class="control-row">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="chk-show-guides" checked>
+                  <span class="toggle-slider"></span>
+                  Show Radial Slices
+                </label>
+              </div>
+              <div class="control-row">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="chk-show-grid" checked>
+                  <span class="toggle-slider"></span>
+                  Show Concentric Grid
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3D settings Tab Content -->
+          <div id="tab-content-3d" class="tab-pane">
+            <div class="section-card">
+              <h3>3D Print Base Plate</h3>
+              <p class="card-desc">Adds a solid layer at the bottom to connect all elements for 3D printing.</p>
+              
+              <div class="control-row">
+                <div class="control-label">
+                  <label for="base-type">Base Shape</label>
+                </div>
+                <select id="base-type" class="select-dropdown">
+                  <option value="none">None (Floating parts)</option>
+                  <option value="circle" selected>Circular Disk</option>
+                  <option value="hexagon">Hexagon</option>
+                  <option value="octagon">Octagon</option>
+                </select>
+              </div>
+
+              <div class="control-row base-plate-control">
+                <div class="control-label">
+                  <label for="base-thickness">Base Thickness</label>
+                  <span id="val-base-thickness">1.2 mm</span>
+                </div>
+                <input type="range" id="base-thickness" min="0.4" max="4.0" value="1.2" step="0.2">
+              </div>
+
+              <div class="control-row base-plate-control">
+                <div class="control-label">
+                  <label for="base-radius">Base Size (Radius)</label>
+                  <span id="val-base-radius">45.0 mm</span>
+                </div>
+                <input type="range" id="base-radius" min="10.0" max="60.0" value="45.0" step="1.0">
+              </div>
+            </div>
+
+            <div class="section-card">
+              <h3>Preview Material & Render</h3>
+              
+              <div class="control-row">
+                <div class="control-label">
+                  <label for="render-material">Filament Style</label>
+                </div>
+                <select id="render-material" class="select-dropdown">
+                  <option value="matte-red">Matte Red PLA</option>
+                  <option value="silk-gold">Silk Gold Metal</option>
+                  <option value="neon-cyan">Translucent Cyan</option>
+                  <option value="glow-green">Glow-in-the-Dark Green</option>
+                  <option value="carbon">Carbon Fiber Black</option>
+                </select>
+              </div>
+              
+              <div class="control-row">
+                <div class="control-label">
+                  <label for="bed-visual">Show Printer Print Bed</label>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="chk-show-bed" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="section-card">
+              <h3>Design Dimensions</h3>
+              <div class="control-row">
+                <div class="control-label">
+                  <label for="mandala-scale">Overall Print Diameter</label>
+                  <span id="val-mandala-scale">100 mm</span>
+                </div>
+                <input type="range" id="mandala-scale" min="50" max="300" value="100" step="10">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Export Buttons Section -->
+        <div class="sidebar-footer">
+          <button id="btn-export-svg" class="btn-secondary btn-full">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            Export SVG
+          </button>
+          <button id="btn-export-stl" class="btn-primary btn-full">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            Export 3D STL (Printable)
+          </button>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- App Core Modules -->
+  <script src="mandala.js" type="module"></script>
+  <script src="preview3d.js" type="module"></script>
+  <script src="app.js" type="module"></script>
+</body>
+</html>
