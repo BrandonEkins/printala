@@ -226,7 +226,7 @@ export class Preview3D {
     // Clear old geometry
     while (this.mandalaGroup.children.length > 0) {
       const obj = this.mandalaGroup.children[0];
-      obj.geometry.dispose();
+      if (obj.geometry) obj.geometry.dispose();
       this.mandalaGroup.remove(obj);
     }
     
@@ -234,9 +234,6 @@ export class Preview3D {
     
     // Scale factor to map 1000px canvas to real physical units (mm)
     const scaleFactor = overallScale / 1000;
-    
-    // Geometries caches to reduce garbage collection / allocation overhead
-    const segmentGeometries = [];
     
     // 1. Build Extruded Mandala Strokes
     mandala.layers.forEach((layer) => {
@@ -247,80 +244,86 @@ export class Preview3D {
       const brushRadius = (layer.brushSize * scaleFactor * 10) / 2; // Physical brush radius in mm
       const layerHeight = layer.height; // Extrusion height in mm
       
-      // Create reusable base geometry primitives scaled for this layer
-      const cylinderJointGeo = new THREE.CylinderGeometry(brushRadius, brushRadius, layerHeight, 8);
-      cylinderJointGeo.rotateX(Math.PI / 2); // Align height along Z-axis
+      const geometries = [];
+      
+      // Reusable base cylinder for joints
+      const baseCylinder = new THREE.CylinderGeometry(brushRadius, brushRadius, layerHeight, 8);
+      baseCylinder.rotateX(Math.PI / 2); // Align height along Z-axis
+      
+      // Reusable unit box for segments
+      const baseBox = new THREE.BoxGeometry(1, 1, 1);
       
       layer.strokes.forEach((stroke) => {
-        // Decompose shapes into list of line segments
-        const segments = [];
+        let pts = [];
+        let isClosed = false;
         
         if (stroke.type === 'freehand') {
-          for (let i = 0; i < stroke.points.length - 1; i++) {
-            segments.push({
-              x1: stroke.points[i].x * scaleFactor,
-              y1: stroke.points[i].y * scaleFactor,
-              x2: stroke.points[i + 1].x * scaleFactor,
-              y2: stroke.points[i + 1].y * scaleFactor
-            });
-          }
+          pts = stroke.points.map(p => ({ x: p.x * scaleFactor, y: p.y * scaleFactor }));
+          isClosed = false;
         } else if (stroke.type === 'line') {
-          segments.push({
-            x1: stroke.x1 * scaleFactor,
-            y1: stroke.y1 * scaleFactor,
-            x2: stroke.x2 * scaleFactor,
-            y2: stroke.y2 * scaleFactor
-          });
+          pts = [
+            { x: stroke.x1 * scaleFactor, y: stroke.y1 * scaleFactor },
+            { x: stroke.x2 * scaleFactor, y: stroke.y2 * scaleFactor }
+          ];
+          isClosed = false;
         } else if (stroke.type === 'circle') {
           const cx = stroke.cx * scaleFactor;
           const cy = stroke.cy * scaleFactor;
           const r = stroke.r * scaleFactor;
           const numSegs = Math.max(16, Math.floor(r * 1.5));
-          
           for (let j = 0; j < numSegs; j++) {
-            const a1 = (j * Math.PI * 2) / numSegs;
-            const a2 = ((j + 1) * Math.PI * 2) / numSegs;
-            segments.push({
-              x1: cx + Math.cos(a1) * r,
-              y1: cy + Math.sin(a1) * r,
-              x2: cx + Math.cos(a2) * r,
-              y2: cy + Math.sin(a2) * r
-            });
+            const a = (j * Math.PI * 2) / numSegs;
+            pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
           }
+          isClosed = true;
         } else if (stroke.type === 'polygon') {
           const cx = stroke.cx * scaleFactor;
           const cy = stroke.cy * scaleFactor;
           const r = stroke.r * scaleFactor;
           const sides = stroke.sides;
           const angle = stroke.angle || 0;
-          
           for (let j = 0; j < sides; j++) {
-            const a1 = angle + (j * Math.PI * 2) / sides;
-            const a2 = angle + ((j + 1) * Math.PI * 2) / sides;
-            segments.push({
-              x1: cx + Math.cos(a1) * r,
-              y1: cy + Math.sin(a1) * r,
-              x2: cx + Math.cos(a2) * r,
-              y2: cy + Math.sin(a2) * r
-            });
+            const a = angle + (j * Math.PI * 2) / sides;
+            pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
           }
+          isClosed = true;
         }
         
-        // Generate symmetric instances of segments
-        segments.forEach((seg) => {
-          for (let i = 0; i < S; i++) {
-            const rotateAngle = (i * Math.PI * 2) / S;
-            
-            // Draw original segment in sector i
-            this.createExtrudedSegment(seg.x1, seg.y1, seg.x2, seg.y2, rotateAngle, false, brushRadius, layerHeight, activeMaterial, cylinderJointGeo);
-            
-            // Draw mirrored segment in sector i
-            if (mirror && S > 1) {
-              this.createExtrudedSegment(seg.x1, seg.y1, seg.x2, seg.y2, rotateAngle, true, brushRadius, layerHeight, activeMaterial, cylinderJointGeo);
-            }
+        if (pts.length < 2) return;
+        
+        // Generate symmetric geometries
+        for (let i = 0; i < S; i++) {
+          const rotateAngle = (i * Math.PI * 2) / S;
+          
+          // Original path
+          this.addStrokeGeometries(geometries, pts, isClosed, rotateAngle, false, brushRadius, layerHeight, baseBox, baseCylinder);
+          
+          // Mirrored path
+          if (mirror && S > 1) {
+            this.addStrokeGeometries(geometries, pts, isClosed, rotateAngle, true, brushRadius, layerHeight, baseBox, baseCylinder);
           }
-        });
+        }
       });
+      
+      // Dispose base helpers
+      baseCylinder.dispose();
+      baseBox.dispose();
+      
+      // Merge all geometries into a single mesh for this layer
+      if (geometries.length > 0) {
+        try {
+          const mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
+          const layerMesh = new THREE.Mesh(mergedGeo, activeMaterial);
+          layerMesh.castShadow = true;
+          layerMesh.receiveShadow = true;
+          this.mandalaGroup.add(layerMesh);
+        } catch (e) {
+          console.error("Error merging geometries for layer:", e);
+        }
+        
+        // Dispose of the sub-geometries since they're merged
+        geometries.forEach(geo => geo.dispose());
+      }
     });
     
     // 2. Build Base Plate (solid backing)
@@ -336,13 +339,12 @@ export class Preview3D {
       const baseGeo = new THREE.CylinderGeometry(baseRadius, baseRadius, baseThickness, segments);
       baseGeo.rotateX(Math.PI / 2); // Align height along Z
       
-      // Shift base plate down slightly or align it at bottom of strokes (sitting at z=0 to z=baseThickness)
       const baseMesh = new THREE.Mesh(baseGeo, activeMaterial);
       baseMesh.position.set(0, 0, baseThickness / 2);
       baseMesh.castShadow = true;
       baseMesh.receiveShadow = true;
       
-      // Shift all stroke meshes UP by base thickness so they sit on top of the base plate!
+      // Shift all stroke meshes UP by base thickness so they sit on top of the base plate
       this.mandalaGroup.children.forEach(mesh => {
         mesh.position.z += baseThickness;
       });
@@ -354,63 +356,94 @@ export class Preview3D {
     this.updateStats();
   }
 
-  // Helper: Create box and cylinder primitives representing a line segment, rotate and position them in scene
-  createExtrudedSegment(x1, y1, x2, y2, rotateAngle, isMirrored, brushRadius, layerHeight, material, cylinderJointGeo) {
+  // Optimize: Construct and orient geometry objects to be merged later
+  addStrokeGeometries(geometriesList, pts, isClosed, rotateAngle, isMirrored, brushRadius, layerHeight, baseBox, baseCylinder) {
     const THREE = window.THREE;
     
-    // Apply reflection if mirrored
-    let tx1 = x1, ty1 = y1;
-    let tx2 = x2, ty2 = y2;
-    if (isMirrored) {
-      ty1 = -ty1;
-      ty2 = -ty2;
-    }
-    
-    // Apply rotation
+    // Transform coordinates based on rotation and mirror state
     const cosA = Math.cos(rotateAngle);
     const sinA = Math.sin(rotateAngle);
     
-    const rx1 = tx1 * cosA - ty1 * sinA;
-    const ry1 = tx1 * sinA + ty1 * cosA;
+    const transformedPts = pts.map(pt => {
+      let tx = pt.x;
+      let ty = pt.y;
+      if (isMirrored) {
+        ty = -ty;
+      }
+      return {
+        x: tx * cosA - ty * sinA,
+        y: tx * sinA + ty * cosA
+      };
+    });
     
-    const rx2 = tx2 * cosA - ty2 * sinA;
-    const ry2 = tx2 * sinA + ty2 * cosA;
-    
-    // Segment vector properties
-    const dx = rx2 - rx1;
-    const dy = ry2 - ry1;
-    const length = Math.sqrt(dx * dx + dy * dy);
-    
-    if (length < 0.001) return; // Skip zero-length segments
-    
-    const mx = (rx1 + rx2) / 2;
-    const my = (ry1 + ry2) / 2;
+    const numPoints = transformedPts.length;
     const mz = layerHeight / 2;
-    const segmentAngle = Math.atan2(dy, dx);
     
-    // Create box segment geometry
-    const boxGeo = new THREE.BoxGeometry(length, brushRadius * 2, layerHeight);
-    const boxMesh = new THREE.Mesh(boxGeo, material);
+    // Add segment boxes and start point cylinders
+    for (let i = 0; i < numPoints - 1; i++) {
+      const p1 = transformedPts[i];
+      const p2 = transformedPts[i + 1];
+      
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      
+      if (length < 0.001) continue;
+      
+      const mx = (p1.x + p2.x) / 2;
+      const my = (p1.y + p2.y) / 2;
+      const segmentAngle = Math.atan2(dy, dx);
+      
+      // Box segment geometry
+      const boxGeo = baseBox.clone();
+      boxGeo.scale(length, brushRadius * 2, layerHeight);
+      
+      const posMatrix = new THREE.Matrix4().makeTranslation(mx, my, mz);
+      const rotMatrix = new THREE.Matrix4().makeRotationZ(segmentAngle);
+      const matrix = posMatrix.multiply(rotMatrix);
+      boxGeo.applyMatrix4(matrix);
+      geometriesList.push(boxGeo);
+      
+      // Rounded joint at segment start
+      const jointGeo = baseCylinder.clone();
+      jointGeo.translate(p1.x, p1.y, mz);
+      geometriesList.push(jointGeo);
+    }
     
-    boxMesh.position.set(mx, my, mz);
-    boxMesh.rotation.z = segmentAngle;
-    boxMesh.castShadow = true;
-    boxMesh.receiveShadow = true;
-    this.mandalaGroup.add(boxMesh);
-    
-    // Add rounded joint mesh at start vertex (to bridge segments smoothly)
-    const jointMesh1 = new THREE.Mesh(cylinderJointGeo, material);
-    jointMesh1.position.set(rx1, ry1, mz);
-    jointMesh1.castShadow = true;
-    jointMesh1.receiveShadow = true;
-    this.mandalaGroup.add(jointMesh1);
-    
-    // Add rounded joint mesh at end vertex
-    const jointMesh2 = new THREE.Mesh(cylinderJointGeo, material);
-    jointMesh2.position.set(rx2, ry2, mz);
-    jointMesh2.castShadow = true;
-    jointMesh2.receiveShadow = true;
-    this.mandalaGroup.add(jointMesh2);
+    // End capping
+    if (isClosed && numPoints >= 3) {
+      const p1 = transformedPts[numPoints - 1];
+      const p2 = transformedPts[0];
+      
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
+      
+      if (length >= 0.001) {
+        const mx = (p1.x + p2.x) / 2;
+        const my = (p1.y + p2.y) / 2;
+        const segmentAngle = Math.atan2(dy, dx);
+        
+        const boxGeo = baseBox.clone();
+        boxGeo.scale(length, brushRadius * 2, layerHeight);
+        
+        const posMatrix = new THREE.Matrix4().makeTranslation(mx, my, mz);
+        const rotMatrix = new THREE.Matrix4().makeRotationZ(segmentAngle);
+        const matrix = posMatrix.multiply(rotMatrix);
+        boxGeo.applyMatrix4(matrix);
+        geometriesList.push(boxGeo);
+        
+        const jointGeo = baseCylinder.clone();
+        jointGeo.translate(p1.x, p1.y, mz);
+        geometriesList.push(jointGeo);
+      }
+    } else if (!isClosed) {
+      // Open path: add cylinder to cap the final point
+      const pLast = transformedPts[numPoints - 1];
+      const jointGeo = baseCylinder.clone();
+      jointGeo.translate(pLast.x, pLast.y, mz);
+      geometriesList.push(jointGeo);
+    }
   }
 
   // Update triangle counts and display boundaries
