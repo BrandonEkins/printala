@@ -87,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const valBaseThickness = document.getElementById('val-base-thickness');
   const baseRadiusSlider = document.getElementById('base-radius');
   const valBaseRadius = document.getElementById('val-base-radius');
+  const chkAutoBaseRadius = document.getElementById('chk-auto-base-radius');
   const selectMaterial = document.getElementById('render-material');
   const chkShowBed = document.getElementById('chk-show-bed');
   const scaleSlider = document.getElementById('mandala-scale');
@@ -278,19 +279,75 @@ document.addEventListener('DOMContentLoaded', () => {
     mandala.drawAll(drawingCanvas);
   }
 
+  // Helper to compute max drawn radius in mm
+  function calculateMaxDrawnRadius() {
+    let maxRadiusPixels = 0;
+    
+    mandala.layers.forEach(layer => {
+      layer.strokes.forEach(stroke => {
+        if (stroke.type === 'freehand') {
+          stroke.points.forEach(pt => {
+            const dist = Math.sqrt(pt.x * pt.x + pt.y * pt.y);
+            if (dist > maxRadiusPixels) maxRadiusPixels = dist;
+          });
+        } else if (stroke.type === 'line') {
+          const d1 = Math.sqrt(stroke.x1 * stroke.x1 + stroke.y1 * stroke.y1);
+          const d2 = Math.sqrt(stroke.x2 * stroke.x2 + stroke.y2 * stroke.y2);
+          maxRadiusPixels = Math.max(maxRadiusPixels, d1, d2);
+        } else if (stroke.type === 'circle') {
+          const distCenter = Math.sqrt(stroke.cx * stroke.cx + stroke.cy * stroke.cy);
+          const maxDist = distCenter + stroke.r;
+          if (maxDist > maxRadiusPixels) maxRadiusPixels = maxDist;
+        } else if (stroke.type === 'polygon') {
+          const distCenter = Math.sqrt(stroke.cx * stroke.cx + stroke.cy * stroke.cy);
+          const maxDist = distCenter + stroke.r;
+          if (maxDist > maxRadiusPixels) maxRadiusPixels = maxDist;
+        }
+      });
+    });
+    
+    const overallScale = parseInt(scaleSlider.value);
+    const scaleFactor = overallScale / 1000;
+    
+    return maxRadiusPixels * scaleFactor;
+  }
+
   // Update 3D Three.js preview
   function update3DPreview() {
     showLoader(true);
     
     // Yield execution slightly to allow spinner to draw
     setTimeout(() => {
+      const overallScale = parseInt(scaleSlider.value);
+      
+      // Update baseRadiusSlider range max dynamically based on print diameter radius
+      const maxAllowedRadius = overallScale / 2;
+      baseRadiusSlider.max = maxAllowedRadius;
+      
+      if (chkAutoBaseRadius && chkAutoBaseRadius.checked) {
+        const maxDrawnRadius = calculateMaxDrawnRadius();
+        
+        let calculatedRadius;
+        if (maxDrawnRadius > 0) {
+          // Pad by 2mm and round up to keep plate boundary slightly wider than drawings
+          calculatedRadius = Math.max(10, Math.ceil(maxDrawnRadius + 2.0));
+        } else {
+          // Safe default if drawing is empty (45% of overall scale radius)
+          calculatedRadius = Math.max(10, Math.round(overallScale * 0.45));
+        }
+        
+        // Cap within allowed bounds
+        calculatedRadius = Math.min(maxAllowedRadius, calculatedRadius);
+        
+        baseRadiusSlider.value = calculatedRadius;
+        valBaseRadius.textContent = calculatedRadius.toFixed(1) + ' mm';
+      }
+      
       const basePlate = {
         type: selectBaseType.value,
         thickness: parseFloat(baseThicknessSlider.value),
         radius: parseFloat(baseRadiusSlider.value)
       };
-      
-      const overallScale = parseInt(scaleSlider.value);
       
       preview3D.updateModel(mandala, basePlate, overallScale);
       showLoader(false);
@@ -548,9 +605,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     baseRadiusSlider.addEventListener('input', (e) => {
+      if (chkAutoBaseRadius) chkAutoBaseRadius.checked = false;
       valBaseRadius.textContent = parseFloat(e.target.value).toFixed(1) + ' mm';
       update3DPreview();
     });
+
+    if (chkAutoBaseRadius) {
+      chkAutoBaseRadius.addEventListener('change', () => {
+        update3DPreview();
+      });
+    }
 
     selectMaterial.addEventListener('change', (e) => {
       preview3D.setMaterial(e.target.value);
