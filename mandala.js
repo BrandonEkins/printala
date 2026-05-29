@@ -44,7 +44,7 @@ export class MandalaLayer {
     this.brushSize = brushSize; // In mm (physical width)
     this.height = height; // In mm (physical thickness)
     this.visible = true;
-    this.smoothing = 0; // Default smoothing level: 0 (Off)
+    this.smoothing = 5; // Default smoothing level: 5
     this.strokes = []; // Array of stroke objects
   }
 
