@@ -92,6 +92,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const baseRadiusSlider = document.getElementById('base-radius');
   const valBaseRadius = document.getElementById('val-base-radius');
   const chkAutoBaseRadius = document.getElementById('chk-auto-base-radius');
+  const chkBaseHole = document.getElementById('chk-base-hole');
+  const baseHoleSizeSlider = document.getElementById('base-hole-size');
+  const valBaseHoleSize = document.getElementById('val-base-hole-size');
+  const baseHoleDistanceSlider = document.getElementById('base-hole-distance');
+  const valBaseHoleDistance = document.getElementById('val-base-hole-distance');
   const selectMaterial = document.getElementById('render-material');
   const chkShowBed = document.getElementById('chk-show-bed');
   const scaleSlider = document.getElementById('mandala-scale');
@@ -100,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Exports
   const btnExportSVG = document.getElementById('btn-export-svg');
   const btnExportSTL = document.getElementById('btn-export-stl');
+  const btnExportOBJ = document.getElementById('btn-export-obj');
   
   const loadingOverlay = document.getElementById('loading-overlay');
 
@@ -337,11 +343,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const radiusCard = document.querySelector('.radius-control-card');
       const basePlateControls = document.querySelectorAll('.base-plate-control');
       
+      const isSolidBase = (baseType !== 'none' && baseType !== 'conforming-outline');
+      const baseHoleControl = document.querySelector('.base-hole-control');
+      const baseHoleDetails = document.querySelectorAll('.base-hole-details');
+
       if (baseType === 'none') {
         basePlateControls.forEach(ctrl => {
           ctrl.style.opacity = '0.3';
           ctrl.style.pointerEvents = 'none';
         });
+        if (baseHoleControl) baseHoleControl.style.display = 'none';
+        baseHoleDetails.forEach(ctrl => ctrl.style.display = 'none');
       } else {
         basePlateControls.forEach(ctrl => {
           ctrl.style.opacity = '1';
@@ -352,6 +364,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (baseType.startsWith('conforming') && radiusCard) {
           radiusCard.style.opacity = '0.3';
           radiusCard.style.pointerEvents = 'none';
+        }
+
+        // Hanging Hole options visibility toggle
+        if (isSolidBase) {
+          if (baseHoleControl) baseHoleControl.style.display = 'block';
+          const isHoleEnabled = chkBaseHole && chkBaseHole.checked;
+          baseHoleDetails.forEach(ctrl => {
+            ctrl.style.display = isHoleEnabled ? 'block' : 'none';
+          });
+        } else {
+          if (baseHoleControl) baseHoleControl.style.display = 'none';
+          baseHoleDetails.forEach(ctrl => ctrl.style.display = 'none');
         }
       }
       
@@ -377,7 +401,10 @@ document.addEventListener('DOMContentLoaded', () => {
         type: baseType,
         thickness: parseFloat(baseThicknessSlider.value),
         radius: parseFloat(baseRadiusSlider.value),
-        border: borderOffset
+        border: borderOffset,
+        addHole: isSolidBase && chkBaseHole && chkBaseHole.checked,
+        holeSize: chkBaseHole ? parseFloat(baseHoleSizeSlider.value) : 0,
+        holeDistance: chkBaseHole ? parseFloat(baseHoleDistanceSlider.value) : 0
       };
       
       preview3D.updateModel(mandala, basePlate, overallScale);
@@ -667,6 +694,26 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    if (chkBaseHole) {
+      chkBaseHole.addEventListener('change', () => {
+        update3DPreview();
+      });
+    }
+
+    if (baseHoleSizeSlider) {
+      baseHoleSizeSlider.addEventListener('input', (e) => {
+        valBaseHoleSize.textContent = parseFloat(e.target.value).toFixed(1) + ' mm';
+        update3DPreview();
+      });
+    }
+
+    if (baseHoleDistanceSlider) {
+      baseHoleDistanceSlider.addEventListener('input', (e) => {
+        valBaseHoleDistance.textContent = parseFloat(e.target.value).toFixed(1) + ' mm';
+        update3DPreview();
+      });
+    }
+
     selectMaterial.addEventListener('change', (e) => {
       preview3D.setMaterial(e.target.value);
     });
@@ -693,6 +740,18 @@ document.addEventListener('DOMContentLoaded', () => {
       const a = document.createElement('a');
       a.href = url;
       a.download = 'mendala_print.stl';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    btnExportOBJ.addEventListener('click', () => {
+      const blob = preview3D.exportToOBJ();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'mendala_assembly.obj';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
