@@ -68,15 +68,14 @@ function simplifyPath(points, epsilon) {
 }
 
 // Helper to convert a path of points into a closed 2D outline shape with round end-caps
-function createStrokeShape(pts, brushRadius) {
-  const THREE = window.THREE;
+// Helper to convert a path of points into a closed 2D outline boundary (array of points) with round end-caps
+function createStrokeOutline(pts, brushRadius) {
   const numPoints = pts.length;
   if (numPoints < 2) return null;
   
   const leftPts = [];
   const rightPts = [];
   
-  // 1. Calculate tangent and normal at each point
   for (let i = 0; i < numPoints; i++) {
     const curr = pts[i];
     let tx = 0;
@@ -132,10 +131,7 @@ function createStrokeShape(pts, brushRadius) {
     });
   }
   
-  // Collect all points in contour sequence
   const outlinePoints = [];
-  
-  // Start cap: from leftPts[0] to rightPts[0] wrapping around the back
   const p0 = pts[0];
   const startDx = leftPts[0].x - p0.x;
   const startDy = leftPts[0].y - p0.y;
@@ -152,12 +148,10 @@ function createStrokeShape(pts, brushRadius) {
   }
   outlinePoints.push({ x: rightPts[0].x, y: rightPts[0].y });
   
-  // Right boundary: from start to end
   for (let i = 1; i < numPoints; i++) {
     outlinePoints.push({ x: rightPts[i].x, y: rightPts[i].y });
   }
   
-  // End cap: from rightPts[last] to leftPts[last] wrapping around the front
   const pLast = pts[numPoints - 1];
   const endDx = rightPts[numPoints - 1].x - pLast.x;
   const endDy = rightPts[numPoints - 1].y - pLast.y;
@@ -172,12 +166,11 @@ function createStrokeShape(pts, brushRadius) {
   }
   outlinePoints.push({ x: leftPts[numPoints - 1].x, y: leftPts[numPoints - 1].y });
   
-  // Left boundary going backwards: from end to start
   for (let i = numPoints - 2; i >= 1; i--) {
     outlinePoints.push({ x: leftPts[i].x, y: leftPts[i].y });
   }
   
-  // Shoelace formula to verify CCW winding
+  // Enforce CCW winding
   let area = 0;
   const n = outlinePoints.length;
   for (let i = 0; i < n; i++) {
@@ -185,51 +178,54 @@ function createStrokeShape(pts, brushRadius) {
     const p2 = outlinePoints[(i + 1) % n];
     area += p1.x * p2.y - p2.x * p1.y;
   }
-  
-  // If CW (negative area), reverse points to make CCW
   if (area < 0) {
     outlinePoints.reverse();
   }
   
-  // Construct the Shape
-  const shape = new THREE.Shape();
-  shape.moveTo(outlinePoints[0].x, outlinePoints[0].y);
-  for (let i = 1; i < n; i++) {
-    shape.lineTo(outlinePoints[i].x, outlinePoints[i].y);
-  }
-  
-  return shape;
+  return outlinePoints;
 }
 
-function create2DShapeForStroke(stroke, scaleFactor, brushRadius, transformPt, rotateAngle, isMirrored) {
-  const THREE = window.THREE;
-  
+// Generate the 2D contour paths for a stroke (returns array of paths, each path is array of points)
+function getStrokeOutlineContours(stroke, scaleFactor, brushRadius, transformPt, rotateAngle, isMirrored) {
   if (stroke.type === 'freehand') {
     const rawPts = stroke.points.map(p => ({ x: p.x * scaleFactor, y: p.y * scaleFactor }));
     const epsilon = Math.max(0.015, brushRadius * 0.04);
     const pts = simplifyPath(rawPts, epsilon);
     const transformedPts = pts.map(pt => transformPt(pt.x, pt.y));
-    return createStrokeShape(transformedPts, brushRadius);
+    const outline = createStrokeOutline(transformedPts, brushRadius);
+    return outline ? [outline] : [];
     
   } else if (stroke.type === 'line') {
     const p1 = transformPt(stroke.x1 * scaleFactor, stroke.y1 * scaleFactor);
     const p2 = transformPt(stroke.x2 * scaleFactor, stroke.y2 * scaleFactor);
-    return createStrokeShape([p1, p2], brushRadius);
+    const outline = createStrokeOutline([p1, p2], brushRadius);
+    return outline ? [outline] : [];
     
   } else if (stroke.type === 'circle') {
     const center = transformPt(stroke.cx * scaleFactor, stroke.cy * scaleFactor);
     const r = stroke.r * scaleFactor;
     
-    const shape = new THREE.Shape();
-    shape.absarc(center.x, center.y, r + brushRadius, 0, Math.PI * 2, false);
+    // Outer circle (CCW)
+    const outer = [];
+    const numSegs = 64;
+    for (let j = 0; j < numSegs; j++) {
+      const a = (j * Math.PI * 2) / numSegs;
+      outer.push({ x: center.x + Math.cos(a) * (r + brushRadius), y: center.y + Math.sin(a) * (r + brushRadius) });
+    }
     
+    const contours = [outer];
+    
+    // Inner hole (CW)
     const innerRadius = r - brushRadius;
     if (innerRadius > 0.001) {
-      const holePath = new THREE.Path();
-      holePath.absarc(center.x, center.y, innerRadius, 0, Math.PI * 2, true);
-      shape.holes.push(holePath);
+      const inner = [];
+      for (let j = numSegs - 1; j >= 0; j--) {
+        const a = (j * Math.PI * 2) / numSegs;
+        inner.push({ x: center.x + Math.cos(a) * innerRadius, y: center.y + Math.sin(a) * innerRadius });
+      }
+      contours.push(inner);
     }
-    return shape;
+    return contours;
     
   } else if (stroke.type === 'polygon') {
     const center = transformPt(stroke.cx * scaleFactor, stroke.cy * scaleFactor);
@@ -238,36 +234,33 @@ function create2DShapeForStroke(stroke, scaleFactor, brushRadius, transformPt, r
     const baseAngle = isMirrored ? -stroke.angle : stroke.angle;
     const finalAngle = baseAngle + rotateAngle;
     
-    const shape = new THREE.Shape();
+    // Outer polygon (CCW)
+    const outer = [];
     for (let j = 0; j < sides; j++) {
       const a = finalAngle + (j * Math.PI * 2) / sides;
-      const px = center.x + Math.cos(a) * (r + brushRadius);
-      const py = center.y + Math.sin(a) * (r + brushRadius);
-      if (j === 0) shape.moveTo(px, py);
-      else shape.lineTo(px, py);
+      outer.push({ x: center.x + Math.cos(a) * (r + brushRadius), y: center.y + Math.sin(a) * (r + brushRadius) });
     }
-    shape.closePath();
     
+    const contours = [outer];
+    
+    // Inner hole (CW)
     const innerRadius = r - brushRadius;
     if (innerRadius > 0.001) {
-      const holePath = new THREE.Path();
+      const inner = [];
       for (let j = sides - 1; j >= 0; j--) {
         const a = finalAngle + (j * Math.PI * 2) / sides;
-        const px = center.x + Math.cos(a) * innerRadius;
-        const py = center.y + Math.sin(a) * innerRadius;
-        if (j === sides - 1) holePath.moveTo(px, py);
-        else holePath.lineTo(px, py);
+        inner.push({ x: center.x + Math.cos(a) * innerRadius, y: center.y + Math.sin(a) * innerRadius });
       }
-      holePath.closePath();
-      shape.holes.push(holePath);
+      contours.push(inner);
     }
-    return shape;
+    return contours;
   }
-  return null;
+  return [];
 }
 
-function getSymmetricShapes(stroke, scaleFactor, brushRadius, S, mirror) {
-  const shapes = [];
+// Generate all symmetric/mirrored contour paths for a stroke
+function getSymmetricContours(stroke, scaleFactor, brushRadius, S, mirror) {
+  const contours = [];
   
   for (let i = 0; i < S; i++) {
     const rotateAngle = (i * Math.PI * 2) / S;
@@ -280,8 +273,8 @@ function getSymmetricShapes(stroke, scaleFactor, brushRadius, S, mirror) {
       y: x * sinA + y * cosA
     });
     
-    let shape = create2DShapeForStroke(stroke, scaleFactor, brushRadius, rotatePt, rotateAngle, false);
-    if (shape) shapes.push(shape);
+    const originalContours = getStrokeOutlineContours(stroke, scaleFactor, brushRadius, rotatePt, rotateAngle, false);
+    originalContours.forEach(c => contours.push(c));
     
     // Mirrored orientation
     if (mirror && S > 1) {
@@ -293,11 +286,45 @@ function getSymmetricShapes(stroke, scaleFactor, brushRadius, S, mirror) {
         };
       };
       
-      let mirroredShape = create2DShapeForStroke(stroke, scaleFactor, brushRadius, mirrorRotatePt, rotateAngle, true);
-      if (mirroredShape) shapes.push(mirroredShape);
+      const mirroredContours = getStrokeOutlineContours(stroke, scaleFactor, brushRadius, mirrorRotatePt, rotateAngle, true);
+      mirroredContours.forEach(c => contours.push(c));
     }
   }
   
+  return contours;
+}
+
+// Helper to convert Clipper PolyTree to THREE.Shape objects
+function polyTreeToShapes(polyTree, scale = 10000) {
+  const THREE = window.THREE;
+  const shapes = [];
+  
+  function traverse(node, parentShape) {
+    const children = node.Childs;
+    if (!children) return;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      const contour = child.Contour;
+      
+      if (contour && contour.length > 0) {
+        const pts = contour.map(pt => new THREE.Vector2(pt.X / scale, pt.Y / scale));
+        
+        if (!child.IsHole) {
+          const shape = new THREE.Shape(pts);
+          shapes.push(shape);
+          traverse(child, shape);
+        } else {
+          if (parentShape) {
+            const holePath = new THREE.Path(pts);
+            parentShape.holes.push(holePath);
+          }
+          traverse(child, null);
+        }
+      }
+    }
+  }
+  
+  traverse(polyTree, null);
   return shapes;
 }
 
@@ -639,61 +666,154 @@ export class Preview3D {
       const brushRadius = (layer.brushSize * scaleFactor * 10) / 2; // Physical brush radius in mm
       const layerHeight = layer.height; // Extrusion height in mm
       
-      let partIdx = 0;
+      // Collect all 2D outlines for this layer
+      const layerContours = [];
       layer.strokes.forEach((stroke) => {
-        const shapes = getSymmetricShapes(stroke, scaleFactor, brushRadius, S, mirror);
-        shapes.forEach((shape) => {
-          const currentExtrudeSettings = { depth: layerHeight, bevelEnabled: false };
-          let strokeGeo = new THREE.ExtrudeGeometry(shape, currentExtrudeSettings);
-          strokeGeo = THREE.BufferGeometryUtils.mergeVertices(strokeGeo, 0.01);
-          
-          const strokeMesh = new THREE.Mesh(strokeGeo, activeMaterial);
-          const layerNameClean = layer.name.replace(/\s+/g, '_');
-          strokeMesh.name = `Layer_${layerNameClean}_Part_${partIdx++}`;
-          strokeMesh.userData = { brushColor: layer.brushColor, type: 'layer' };
-          strokeMesh.castShadow = true;
-          strokeMesh.receiveShadow = true;
-          
-          // Shift UP by base thickness minus a small overlap (0.05 mm) to prevent coplanar touching faces
-          if (baseType !== 'none' && baseThickness > 0) {
-            strokeMesh.position.z = baseThickness - 0.05;
-          }
-          
-          this.mandalaGroup.add(strokeMesh);
-        });
+        const contours = getSymmetricContours(stroke, scaleFactor, brushRadius, S, mirror);
+        contours.forEach(c => layerContours.push(c));
       });
+      
+      if (layerContours.length > 0) {
+        let finalShapes = [];
+        
+        // Try to perform 2D Union using ClipperLib if loaded
+        const ClipperLib = window.ClipperLib;
+        if (ClipperLib) {
+          try {
+            const scale = 10000;
+            const clipper = new ClipperLib.Clipper();
+            
+            layerContours.forEach((contour) => {
+              const clipperPath = contour.map(pt => ({
+                X: Math.round(pt.x * scale),
+                Y: Math.round(pt.y * scale)
+              }));
+              clipper.AddPath(clipperPath, ClipperLib.PolyType.ptSubject, true);
+            });
+            
+            const polyTree = new ClipperLib.PolyTree();
+            clipper.Execute(
+              ClipperLib.ClipType.ctUnion,
+              polyTree,
+              ClipperLib.PolyFillType.pftNonZero,
+              ClipperLib.PolyFillType.pftNonZero
+            );
+            
+            finalShapes = polyTreeToShapes(polyTree, scale);
+          } catch (err) {
+            console.error("Clipper union failed for layer, falling back to non-unioned shapes:", err);
+            // Fallback: convert contours to THREE.Shapes directly
+            finalShapes = layerContours.map(c => new THREE.Shape(c.map(pt => new THREE.Vector2(pt.x, pt.y))));
+          }
+        } else {
+          // Fallback if ClipperLib is not loaded
+          finalShapes = layerContours.map(c => new THREE.Shape(c.map(pt => new THREE.Vector2(pt.x, pt.y))));
+        }
+        
+        // Extrude all shapes
+        const geometries = [];
+        finalShapes.forEach((shape) => {
+          const currentExtrudeSettings = { depth: layerHeight, bevelEnabled: false };
+          const strokeGeo = new THREE.ExtrudeGeometry(shape, currentExtrudeSettings);
+          geometries.push(strokeGeo);
+        });
+        
+        if (geometries.length > 0) {
+          try {
+            let mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
+            mergedGeo = THREE.BufferGeometryUtils.mergeVertices(mergedGeo, 0.01);
+            const layerMesh = new THREE.Mesh(mergedGeo, activeMaterial);
+            layerMesh.name = `Layer_${layer.name.replace(/\s+/g, '_')}`;
+            layerMesh.userData = { brushColor: layer.brushColor, type: 'layer' };
+            layerMesh.castShadow = true;
+            layerMesh.receiveShadow = true;
+            
+            // Shift UP by base thickness minus a small overlap (0.05 mm) to prevent coplanar touching faces
+            if (baseType !== 'none' && baseThickness > 0) {
+              layerMesh.position.z = baseThickness - 0.05;
+            }
+            
+            this.mandalaGroup.add(layerMesh);
+          } catch (e) {
+            console.error("Error creating layer mesh:", e);
+          }
+          geometries.forEach(geo => geo.dispose());
+        }
+      }
     });
     
     // 2. Build Base Plate (solid backing or conforming outline backing)
     if (baseType !== 'none' && baseThickness > 0) {
       if (baseType === 'conforming-outline') {
         // Conforming backing: duplicate all strokes with an expanded brush size
-        let backingPartIdx = 0;
+        const backingContours = [];
         mandala.layers.forEach((layer) => {
           if (!layer.visible || layer.strokes.length === 0) return;
           
           const S = layer.symmetry;
           const mirror = layer.mirror;
-          
-          // Expanded brush radius in mm: (brushSize + 2 * baseBorder) / 2
           const expandedBrushRadius = ((layer.brushSize + 2 * baseBorder) * scaleFactor * 10) / 2;
           
           layer.strokes.forEach((stroke) => {
-            const shapes = getSymmetricShapes(stroke, scaleFactor, expandedBrushRadius, S, mirror);
-            shapes.forEach((shape) => {
-              const currentExtrudeSettings = { depth: baseThickness, bevelEnabled: false };
-              let strokeGeo = new THREE.ExtrudeGeometry(shape, currentExtrudeSettings);
-              strokeGeo = THREE.BufferGeometryUtils.mergeVertices(strokeGeo, 0.01);
+            const contours = getSymmetricContours(stroke, scaleFactor, expandedBrushRadius, S, mirror);
+            contours.forEach(c => backingContours.push(c));
+          });
+        });
+        
+        if (backingContours.length > 0) {
+          let finalShapes = [];
+          const ClipperLib = window.ClipperLib;
+          if (ClipperLib) {
+            try {
+              const scale = 10000;
+              const clipper = new ClipperLib.Clipper();
+              backingContours.forEach((contour) => {
+                const clipperPath = contour.map(pt => ({
+                  X: Math.round(pt.x * scale),
+                  Y: Math.round(pt.y * scale)
+                }));
+                clipper.AddPath(clipperPath, ClipperLib.PolyType.ptSubject, true);
+              });
               
-              const conformingMesh = new THREE.Mesh(strokeGeo, activeMaterial);
-              conformingMesh.name = `Base_Plate_Part_${backingPartIdx++}`;
+              const polyTree = new ClipperLib.PolyTree();
+              clipper.Execute(
+                ClipperLib.ClipType.ctUnion,
+                polyTree,
+                ClipperLib.PolyFillType.pftNonZero,
+                ClipperLib.PolyFillType.pftNonZero
+              );
+              finalShapes = polyTreeToShapes(polyTree, scale);
+            } catch (err) {
+              console.error("Clipper union failed for conforming base, falling back:", err);
+              finalShapes = backingContours.map(c => new THREE.Shape(c.map(pt => new THREE.Vector2(pt.x, pt.y))));
+            }
+          } else {
+            finalShapes = backingContours.map(c => new THREE.Shape(c.map(pt => new THREE.Vector2(pt.x, pt.y))));
+          }
+          
+          const geometries = [];
+          finalShapes.forEach((shape) => {
+            const currentExtrudeSettings = { depth: baseThickness, bevelEnabled: false };
+            const strokeGeo = new THREE.ExtrudeGeometry(shape, currentExtrudeSettings);
+            geometries.push(strokeGeo);
+          });
+          
+          if (geometries.length > 0) {
+            try {
+              let mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
+              mergedGeo = THREE.BufferGeometryUtils.mergeVertices(mergedGeo, 0.01);
+              const conformingMesh = new THREE.Mesh(mergedGeo, activeMaterial);
+              conformingMesh.name = "Base_Plate";
               conformingMesh.userData = { brushColor: '#e2e8f0', type: 'base' };
               conformingMesh.castShadow = true;
               conformingMesh.receiveShadow = true;
               this.mandalaGroup.add(conformingMesh);
-            });
-          });
-        });
+            } catch (e) {
+              console.error("Error creating conforming base:", e);
+            }
+            geometries.forEach(geo => geo.dispose());
+          }
+        }
       } else if (baseType === 'conforming-solid') {
         // Conforming solid backing: create a solid fill backing that covers all interior areas
         const numBins = 360;
