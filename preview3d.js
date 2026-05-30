@@ -909,7 +909,13 @@ export class Preview3D {
           const holeX = Math.cos(theta) * holeDist;
           const holeY = Math.sin(theta) * holeDist;
           const holePath = new THREE.Path();
-          holePath.absarc(holeX, holeY, holeRadius, 0, Math.PI * 2, true); // clockwise for subtraction
+          const numHoleSegs = 32;
+          for (let i = 0; i < numHoleSegs; i++) {
+            const a = (i * Math.PI * -2) / numHoleSegs;
+            if (i === 0) holePath.moveTo(holeX + Math.cos(a) * holeRadius, holeY + Math.sin(a) * holeRadius);
+            else holePath.lineTo(holeX + Math.cos(a) * holeRadius, holeY + Math.sin(a) * holeRadius);
+          }
+          holePath.closePath();
           shape.holes.push(holePath);
         }
         
@@ -944,8 +950,14 @@ export class Preview3D {
           }
           shape.closePath();
         } else {
-          // Circle
-          shape.absarc(0, 0, baseRadius, 0, Math.PI * 2, false);
+          // Circle (manual segment loop to avoid duplicate start/end point)
+          const numSegs = 64;
+          for (let i = 0; i < numSegs; i++) {
+            const a = (i * Math.PI * 2) / numSegs;
+            if (i === 0) shape.moveTo(Math.cos(a) * baseRadius, Math.sin(a) * baseRadius);
+            else shape.lineTo(Math.cos(a) * baseRadius, Math.sin(a) * baseRadius);
+          }
+          shape.closePath();
         }
         
         // Add hanging hole if enabled
@@ -957,7 +969,13 @@ export class Preview3D {
           const holeX = Math.cos(theta) * holeDist;
           const holeY = Math.sin(theta) * holeDist;
           const holePath = new THREE.Path();
-          holePath.absarc(holeX, holeY, holeRadius, 0, Math.PI * 2, true); // clockwise for subtraction
+          const numHoleSegs = 32;
+          for (let i = 0; i < numHoleSegs; i++) {
+            const a = (i * Math.PI * -2) / numHoleSegs;
+            if (i === 0) holePath.moveTo(holeX + Math.cos(a) * holeRadius, holeY + Math.sin(a) * holeRadius);
+            else holePath.lineTo(holeX + Math.cos(a) * holeRadius, holeY + Math.sin(a) * holeRadius);
+          }
+          holePath.closePath();
           shape.holes.push(holePath);
         }
         
