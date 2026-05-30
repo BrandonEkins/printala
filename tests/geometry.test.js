@@ -83,6 +83,7 @@ async function runTests() {
       global.polyTreeToShapes = polyTreeToShapes;
       global.simplifyPath = simplifyPath;
       global.getStrokeOutlineContours = getStrokeOutlineContours;
+      global.analyzeMeshManifold = analyzeMeshManifold;
     `);
     
     console.log('✔ Successfully loaded preview3d.js dependencies');
@@ -172,7 +173,86 @@ async function runTests() {
     });
     
     console.log('✔ Test 2 passed successfully');
-    console.log('\nAll geometry and extrusion tests passed with flying colors! 🎉');
+    
+    // ----------------------------------------------------
+    // Test 3: Manifold Checking Analysis
+    // ----------------------------------------------------
+    console.log('\nRunning Test 3: Manifold checker validation...');
+    
+    // Case A: Manifold closed welded Cube
+    const boxGeo = new global.THREE.BufferGeometry();
+    const boxVertices = new Float32Array([
+      -1, -1, -1, // 0
+       1, -1, -1, // 1
+       1,  1, -1, // 2
+      -1,  1, -1, // 3
+      -1, -1,  1, // 4
+       1, -1,  1, // 5
+       1,  1,  1, // 6
+      -1,  1,  1  // 7
+    ]);
+    const boxIndices = [
+      0, 1, 2,  0, 2, 3,
+      1, 5, 6,  1, 6, 2,
+      5, 4, 7,  5, 7, 6,
+      4, 0, 3,  4, 3, 7,
+      3, 2, 6,  3, 6, 7,
+      4, 5, 1,  4, 1, 0
+    ];
+    boxGeo.setAttribute('position', new global.THREE.BufferAttribute(boxVertices, 3));
+    boxGeo.setIndex(boxIndices);
+    const boxAnalysis = global.analyzeMeshManifold(boxGeo);
+    
+    console.log('Welded cube manifold report:', boxAnalysis);
+    assert.strictEqual(boxAnalysis.isManifold, true, 'Welded cube geometry should be manifold');
+    assert.strictEqual(boxAnalysis.boundaryEdges, 0, 'Welded cube should have 0 boundary/leak edges');
+    assert.strictEqual(boxAnalysis.nonManifoldEdges, 0, 'Welded cube should have 0 non-manifold edges');
+    console.log('✔ Case A passed: Welded cube is manifold');
+
+    // Case B: Open mesh (Single flat triangle)
+    const triangleGeo = new global.THREE.BufferGeometry();
+    const vertices = new Float32Array([
+      0, 0, 0,
+      1, 0, 0,
+      0, 1, 0
+    ]);
+    triangleGeo.setAttribute('position', new global.THREE.BufferAttribute(vertices, 3));
+    const triangleAnalysis = global.analyzeMeshManifold(triangleGeo);
+    
+    console.log('Single triangle open geometry report:', triangleAnalysis);
+    assert.strictEqual(triangleAnalysis.isManifold, false, 'Open flat triangle should not be manifold');
+    assert.strictEqual(triangleAnalysis.boundaryEdges, 3, 'Single triangle should have 3 boundary/leak edges');
+    assert.strictEqual(triangleAnalysis.nonManifoldEdges, 0, 'Single triangle should have 0 non-manifold edges');
+    console.log('✔ Case B passed: Single triangle identified with boundaries');
+
+    // Case C: Non-manifold T-junction (3 triangles sharing a single edge)
+    const nonManifoldGeo = new global.THREE.BufferGeometry();
+    // 5 vertices:
+    // v0: (0,0,0), v1: (1,0,0)  <-- the shared edge
+    // v2: (0,1,0), v3: (0,0,1), v4: (0,-1,0) <-- the outer points for the 3 wings
+    const nmVertices = new Float32Array([
+      0, 0, 0,  // 0
+      1, 0, 0,  // 1
+      0, 1, 0,  // 2
+      0, 0, 1,  // 3
+      0, -1, 0  // 4
+    ]);
+    const nmIndices = [
+      0, 1, 2,  // Face 1: sharing (0,1)
+      0, 1, 3,  // Face 2: sharing (0,1)
+      0, 1, 4   // Face 3: sharing (0,1) - non-manifold edge!
+    ];
+    nonManifoldGeo.setAttribute('position', new global.THREE.BufferAttribute(nmVertices, 3));
+    nonManifoldGeo.setIndex(nmIndices);
+    const nonManifoldAnalysis = global.analyzeMeshManifold(nonManifoldGeo);
+    
+    console.log('T-junction geometry report:', nonManifoldAnalysis);
+    assert.strictEqual(nonManifoldAnalysis.isManifold, false, 'T-junction should not be manifold');
+    assert.strictEqual(nonManifoldAnalysis.nonManifoldEdges, 1, 'T-junction should have exactly 1 non-manifold edge');
+    console.log('✔ Case C passed: Non-manifold edge correctly detected');
+
+    console.log('✔ Test 3 passed successfully');
+    console.log('\nAll geometry, extrusion, and manifold tests passed with flying colors! 🎉');
     process.exit(0);
     
   } catch (err) {

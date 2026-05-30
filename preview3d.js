@@ -1169,37 +1169,74 @@ export class Preview3D {
       objText += `o ${name}\n`;
       objText += `g ${name}\n`;
       
-      // 1. Write vertices for this mesh
+      // Perform position-based vertex welding on export
+      const uniqueVertices = [];
+      const vertexMap = new Map();
       const matrix = mesh.matrixWorld;
-      const tempV = new THREE.Vector3();
-      for (let i = 0; i < positionAttr.count; i++) {
-        tempV.set(positionAttr.getX(i), positionAttr.getY(i), positionAttr.getZ(i)).applyMatrix4(matrix);
-        objText += `v ${tempV.x.toFixed(4)} ${tempV.y.toFixed(4)} ${tempV.z.toFixed(4)}\n`;
+      
+      function getVertexKey(x, y, z) {
+        return `${x.toFixed(4)}_${y.toFixed(4)}_${z.toFixed(4)}`;
       }
+
+      const indexAttr = geom.index;
+      const indices = indexAttr ? indexAttr.array : null;
+      const numFaces = indices ? indices.length / 3 : positionAttr.count / 3;
+      const weldedTriangles = [];
+
+      for (let i = 0; i < numFaces; i++) {
+        let idx1, idx2, idx3;
+        if (indices) {
+          idx1 = indices[i * 3];
+          idx2 = indices[i * 3 + 1];
+          idx3 = indices[i * 3 + 2];
+        } else {
+          idx1 = i * 3;
+          idx2 = i * 3 + 1;
+          idx3 = i * 3 + 2;
+        }
+
+        const v1 = new THREE.Vector3(positionAttr.getX(idx1), positionAttr.getY(idx1), positionAttr.getZ(idx1)).applyMatrix4(matrix);
+        const v2 = new THREE.Vector3(positionAttr.getX(idx2), positionAttr.getY(idx2), positionAttr.getZ(idx2)).applyMatrix4(matrix);
+        const v3 = new THREE.Vector3(positionAttr.getX(idx3), positionAttr.getY(idx3), positionAttr.getZ(idx3)).applyMatrix4(matrix);
+
+        const keys = [
+          getVertexKey(v1.x, v1.y, v1.z),
+          getVertexKey(v2.x, v2.y, v2.z),
+          getVertexKey(v3.x, v3.y, v3.z)
+        ];
+
+        const mappedIndices = [];
+        const vectors = [v1, v2, v3];
+
+        for (let k = 0; k < 3; k++) {
+          const key = keys[k];
+          if (!vertexMap.has(key)) {
+            vertexMap.set(key, uniqueVertices.length);
+            uniqueVertices.push(vectors[k]);
+          }
+          mappedIndices.push(vertexMap.get(key));
+        }
+
+        weldedTriangles.push(mappedIndices);
+      }
+
+      // Write vertices
+      uniqueVertices.forEach((v) => {
+        objText += `v ${v.x.toFixed(4)} ${v.y.toFixed(4)} ${v.z.toFixed(4)}\n`;
+      });
       
       const startIdx = totalVertices + 1; // 1-based index offset
       
-      // 2. Write faces for this mesh
-      const indexAttr = geom.index;
-      if (indexAttr) {
-        const indices = indexAttr.array;
-        for (let i = 0; i < indexAttr.count; i += 3) {
-          const v1 = indices[i] + startIdx;
-          const v2 = indices[i + 1] + startIdx;
-          const v3 = indices[i + 2] + startIdx;
-          objText += `f ${v1} ${v2} ${v3}\n`;
-        }
-      } else {
-        for (let i = 0; i < positionAttr.count; i += 3) {
-          const v1 = i + startIdx;
-          const v2 = i + 1 + startIdx;
-          const v3 = i + 2 + startIdx;
-          objText += `f ${v1} ${v2} ${v3}\n`;
-        }
-      }
+      // Write faces
+      weldedTriangles.forEach((tri) => {
+        const v1 = tri[0] + startIdx;
+        const v2 = tri[1] + startIdx;
+        const v3 = tri[2] + startIdx;
+        objText += `f ${v1} ${v2} ${v3}\n`;
+      });
       
       objText += "\n";
-      totalVertices += positionAttr.count;
+      totalVertices += uniqueVertices.length;
     });
     
     return new Blob([objText], { type: 'text/plain' });
@@ -1286,20 +1323,67 @@ export class Preview3D {
       if (!positionAttr) return;
 
       const indexAttr = geom.index;
-      const tempV = new THREE.Vector3();
       const currentMeshId = objectId++;
       const nameVal = mesh.name || ('Part_' + currentMeshId);
       meshObjectIds.push({ id: currentMeshId, name: nameVal });
+
+      // Perform position-based vertex welding on export
+      const uniqueVertices = [];
+      const vertexMap = new Map();
+      
+      function getVertexKey(x, y, z) {
+        return `${x.toFixed(4)}_${y.toFixed(4)}_${z.toFixed(4)}`;
+      }
+
+      const indices = indexAttr ? indexAttr.array : null;
+      const numFaces = indices ? indices.length / 3 : positionAttr.count / 3;
+      const weldedTriangles = [];
+
+      for (let i = 0; i < numFaces; i++) {
+        let idx1, idx2, idx3;
+        if (indices) {
+          idx1 = indices[i * 3];
+          idx2 = indices[i * 3 + 1];
+          idx3 = indices[i * 3 + 2];
+        } else {
+          idx1 = i * 3;
+          idx2 = i * 3 + 1;
+          idx3 = i * 3 + 2;
+        }
+
+        const v1 = new THREE.Vector3(positionAttr.getX(idx1), positionAttr.getY(idx1), positionAttr.getZ(idx1)).applyMatrix4(matrix);
+        const v2 = new THREE.Vector3(positionAttr.getX(idx2), positionAttr.getY(idx2), positionAttr.getZ(idx2)).applyMatrix4(matrix);
+        const v3 = new THREE.Vector3(positionAttr.getX(idx3), positionAttr.getY(idx3), positionAttr.getZ(idx3)).applyMatrix4(matrix);
+
+        const keys = [
+          getVertexKey(v1.x, v1.y, v1.z),
+          getVertexKey(v2.x, v2.y, v2.z),
+          getVertexKey(v3.x, v3.y, v3.z)
+        ];
+
+        const mappedIndices = [];
+        const vectors = [v1, v2, v3];
+
+        for (let k = 0; k < 3; k++) {
+          const key = keys[k];
+          if (!vertexMap.has(key)) {
+            vertexMap.set(key, uniqueVertices.length);
+            uniqueVertices.push(vectors[k]);
+          }
+          mappedIndices.push(vertexMap.get(key));
+        }
+
+        weldedTriangles.push(mappedIndices);
+      }
 
       modelXml += '    <object id="' + currentMeshId + '" type="model" name="' + nameVal + '">\n';
       modelXml += '      <mesh>\n';
       modelXml += '        <vertices>\n';
 
-      // Write vertices
-      for (let i = 0; i < positionAttr.count; i++) {
-        tempV.set(positionAttr.getX(i), positionAttr.getY(i), positionAttr.getZ(i)).applyMatrix4(matrix);
-        modelXml += '          <vertex x="' + tempV.x.toFixed(4) + '" y="' + tempV.y.toFixed(4) + '" z="' + tempV.z.toFixed(4) + '" />\n';
-      }
+      // Write unique welded vertices
+      uniqueVertices.forEach((v) => {
+        modelXml += '          <vertex x="' + v.x.toFixed(4) + '" y="' + v.y.toFixed(4) + '" z="' + v.z.toFixed(4) + '" />\n';
+      });
 
       modelXml += '        </vertices>\n';
       modelXml += '        <triangles>\n';
@@ -1313,17 +1397,10 @@ export class Preview3D {
       }
       const colorIndex = colorIndexMap.get(colorStr) || 0;
 
-      // Write triangles (indexAttr exists since we welded)
-      if (indexAttr) {
-        const indices = indexAttr.array;
-        for (let i = 0; i < indexAttr.count; i += 3) {
-          modelXml += '          <triangle v1="' + indices[i] + '" v2="' + indices[i + 1] + '" v3="' + indices[i + 2] + '" pid="1" pindex="' + colorIndex + '" />\n';
-        }
-      } else {
-        for (let i = 0; i < positionAttr.count; i += 3) {
-          modelXml += '          <triangle v1="' + i + '" v2="' + (i + 1) + '" v3="' + (i + 2) + '" pid="1" pindex="' + colorIndex + '" />\n';
-        }
-      }
+      // Write welded triangles
+      weldedTriangles.forEach((tri) => {
+        modelXml += '          <triangle v1="' + tri[0] + '" v2="' + tri[1] + '" v3="' + tri[2] + '" pid="1" pindex="' + colorIndex + '" />\n';
+      });
 
       modelXml += '        </triangles>\n';
       modelXml += '      </mesh>\n';
@@ -1366,3 +1443,64 @@ export class Preview3D {
     return blob;
   }
 }
+
+/**
+ * Analyzes a Three.js BufferGeometry for non-manifold and boundary edges.
+ * @param {THREE.BufferGeometry} geometry - The welded geometry to check.
+ * @returns {{isManifold: boolean, boundaryEdges: number, nonManifoldEdges: number, totalEdges: number}}
+ */
+export function analyzeMeshManifold(geometry) {
+  const indexAttr = geometry.index;
+  const positionAttr = geometry.attributes.position;
+  if (!positionAttr) {
+    return { isManifold: false, boundaryEdges: 0, nonManifoldEdges: 0, totalEdges: 0 };
+  }
+
+  const edgeMap = new Map();
+  const indices = indexAttr ? indexAttr.array : null;
+  const numFaces = indices ? indices.length / 3 : positionAttr.count / 3;
+
+  function getEdgeKey(v1, v2) {
+    return v1 < v2 ? `${v1}_${v2}` : `${v2}_${v1}`;
+  }
+
+  for (let i = 0; i < numFaces; i++) {
+    let v1, v2, v3;
+    if (indices) {
+      v1 = indices[i * 3];
+      v2 = indices[i * 3 + 1];
+      v3 = indices[i * 3 + 2];
+    } else {
+      v1 = i * 3;
+      v2 = i * 3 + 1;
+      v3 = i * 3 + 2;
+    }
+
+    const e1 = getEdgeKey(v1, v2);
+    const e2 = getEdgeKey(v2, v3);
+    const e3 = getEdgeKey(v3, v1);
+
+    edgeMap.set(e1, (edgeMap.get(e1) || 0) + 1);
+    edgeMap.set(e2, (edgeMap.get(e2) || 0) + 1);
+    edgeMap.set(e3, (edgeMap.get(e3) || 0) + 1);
+  }
+
+  let boundaryEdges = 0;
+  let nonManifoldEdges = 0;
+
+  for (const [edge, count] of edgeMap.entries()) {
+    if (count === 1) {
+      boundaryEdges++;
+    } else if (count > 2) {
+      nonManifoldEdges++;
+    }
+  }
+
+  return {
+    isManifold: boundaryEdges === 0 && nonManifoldEdges === 0,
+    boundaryEdges,
+    nonManifoldEdges,
+    totalEdges: edgeMap.size
+  };
+}
+
