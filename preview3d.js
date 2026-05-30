@@ -639,83 +639,61 @@ export class Preview3D {
       const brushRadius = (layer.brushSize * scaleFactor * 10) / 2; // Physical brush radius in mm
       const layerHeight = layer.height; // Extrusion height in mm
       
-      const geometries = [];
-      
+      let partIdx = 0;
       layer.strokes.forEach((stroke) => {
         const shapes = getSymmetricShapes(stroke, scaleFactor, brushRadius, S, mirror);
         shapes.forEach((shape) => {
           const currentExtrudeSettings = { depth: layerHeight, bevelEnabled: false };
-          const strokeGeo = new THREE.ExtrudeGeometry(shape, currentExtrudeSettings);
-          geometries.push(strokeGeo);
-        });
-      });
-      
-      // Merge all geometries into a single mesh for this layer
-      if (geometries.length > 0) {
-        try {
-          let mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
-          mergedGeo = THREE.BufferGeometryUtils.mergeVertices(mergedGeo, 0.01);
-          const layerMesh = new THREE.Mesh(mergedGeo, activeMaterial);
-          layerMesh.name = `Layer_${layer.name.replace(/\s+/g, '_')}`;
-          layerMesh.userData = { brushColor: layer.brushColor, type: 'layer' };
-          layerMesh.castShadow = true;
-          layerMesh.receiveShadow = true;
+          let strokeGeo = new THREE.ExtrudeGeometry(shape, currentExtrudeSettings);
+          strokeGeo = THREE.BufferGeometryUtils.mergeVertices(strokeGeo, 0.01);
+          
+          const strokeMesh = new THREE.Mesh(strokeGeo, activeMaterial);
+          const layerNameClean = layer.name.replace(/\s+/g, '_');
+          strokeMesh.name = `Layer_${layerNameClean}_Part_${partIdx++}`;
+          strokeMesh.userData = { brushColor: layer.brushColor, type: 'layer' };
+          strokeMesh.castShadow = true;
+          strokeMesh.receiveShadow = true;
           
           // Shift UP by base thickness minus a small overlap (0.05 mm) to prevent coplanar touching faces
           if (baseType !== 'none' && baseThickness > 0) {
-            layerMesh.position.z = baseThickness - 0.05;
+            strokeMesh.position.z = baseThickness - 0.05;
           }
           
-          this.mandalaGroup.add(layerMesh);
-        } catch (e) {
-          console.error("Error merging geometries for layer:", e);
-        }
-        
-        // Dispose of the sub-geometries since they're merged
-        geometries.forEach(geo => geo.dispose());
-      }
+          this.mandalaGroup.add(strokeMesh);
+        });
+      });
     });
     
     // 2. Build Base Plate (solid backing or conforming outline backing)
     if (baseType !== 'none' && baseThickness > 0) {
       if (baseType === 'conforming-outline') {
         // Conforming backing: duplicate all strokes with an expanded brush size
-        const geometries = [];
-        
+        let backingPartIdx = 0;
         mandala.layers.forEach((layer) => {
           if (!layer.visible || layer.strokes.length === 0) return;
           
           const S = layer.symmetry;
           const mirror = layer.mirror;
           
-          // Expanded brush radius in mm: (brushSize + 2 * borderOffset) / 2
+          // Expanded brush radius in mm: (brushSize + 2 * baseBorder) / 2
           const expandedBrushRadius = ((layer.brushSize + 2 * baseBorder) * scaleFactor * 10) / 2;
           
           layer.strokes.forEach((stroke) => {
             const shapes = getSymmetricShapes(stroke, scaleFactor, expandedBrushRadius, S, mirror);
             shapes.forEach((shape) => {
               const currentExtrudeSettings = { depth: baseThickness, bevelEnabled: false };
-              const strokeGeo = new THREE.ExtrudeGeometry(shape, currentExtrudeSettings);
-              geometries.push(strokeGeo);
+              let strokeGeo = new THREE.ExtrudeGeometry(shape, currentExtrudeSettings);
+              strokeGeo = THREE.BufferGeometryUtils.mergeVertices(strokeGeo, 0.01);
+              
+              const conformingMesh = new THREE.Mesh(strokeGeo, activeMaterial);
+              conformingMesh.name = `Base_Plate_Part_${backingPartIdx++}`;
+              conformingMesh.userData = { brushColor: '#e2e8f0', type: 'base' };
+              conformingMesh.castShadow = true;
+              conformingMesh.receiveShadow = true;
+              this.mandalaGroup.add(conformingMesh);
             });
           });
         });
-        
-        if (geometries.length > 0) {
-          try {
-            let mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
-            mergedGeo = THREE.BufferGeometryUtils.mergeVertices(mergedGeo, 0.01);
-            const conformingMesh = new THREE.Mesh(mergedGeo, activeMaterial);
-            conformingMesh.name = "Base_Plate";
-            conformingMesh.userData = { brushColor: '#e2e8f0', type: 'base' };
-            conformingMesh.castShadow = true;
-            conformingMesh.receiveShadow = true;
-            this.mandalaGroup.add(conformingMesh);
-          } catch (e) {
-            console.error("Error creating conforming base:", e);
-          }
-          geometries.forEach(geo => geo.dispose());
-        }
       } else if (baseType === 'conforming-solid') {
         // Conforming solid backing: create a solid fill backing that covers all interior areas
         const numBins = 360;
