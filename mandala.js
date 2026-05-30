@@ -473,6 +473,9 @@ export class Mandala {
       // Validation check
       if (!data || !Array.isArray(data.layers)) return false;
       
+      // Track the project name if present in the imported JSON
+      this.loadedProjectName = data.projectName || '';
+      
       this.layers = data.layers.map(layerData => {
         const layer = new MandalaLayer(
           layerData.id || ('layer-' + Date.now() + '-' + Math.floor(Math.random() * 1000)),
@@ -513,8 +516,9 @@ export class Mandala {
   }
 
   // Save state to JSON string
-  exportToJSON() {
+  exportToJSON(projectName) {
     return JSON.stringify({
+      projectName: projectName || '',
       layers: this.layers,
       activeLayerId: this.activeLayerId
     }, null, 2);

@@ -2,6 +2,7 @@
 
 import { Mandala, smoothPoints } from './mandala.js';
 import { Preview3D } from './preview3d.js';
+import { generateRandomName } from './namegenerator.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Core State
@@ -19,6 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const drawingCanvas = document.getElementById('drawing-canvas');
   const guideCanvas = document.getElementById('guide-canvas');
   const canvasZoomWrapper = document.getElementById('canvas-zoom-wrapper');
+  const projectNameInput = document.getElementById('project-name-input');
+  const btnRegenerateName = document.getElementById('btn-regenerate-name');
   
   // Set drawing resolutions
   drawingCanvas.width = 1000;
@@ -107,12 +110,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Exports
   const btnExportSVG = document.getElementById('btn-export-svg');
   const btnExportSTL = document.getElementById('btn-export-stl');
-  const btnExportOBJ = document.getElementById('btn-export-obj');
+  const btnExport3MF = document.getElementById('btn-export-3mf');
   
   const loadingOverlay = document.getElementById('loading-overlay');
 
   // --- Initializers ---
   function init() {
+    projectNameInput.value = generateRandomName();
     setupDrawingEvents();
     setupUIControls();
     updateLayerListUI();
@@ -425,6 +429,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- UI Controls Event Binding ---
   function setupUIControls() {
+    // Project Name Editing & Regeneration
+    projectNameInput.addEventListener('input', (e) => {
+      const selectionStart = e.target.selectionStart;
+      const originalLength = e.target.value.length;
+      
+      // Convert to lowercase, replace spaces with underscores, and remove illegal characters
+      let cleaned = e.target.value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '');
+      
+      e.target.value = cleaned;
+      
+      // Adjust cursor position
+      const diff = cleaned.length - originalLength;
+      e.target.setSelectionRange(selectionStart + diff, selectionStart + diff);
+    });
+
+    projectNameInput.addEventListener('blur', (e) => {
+      if (!e.target.value.trim()) {
+        e.target.value = generateRandomName();
+      }
+    });
+
+    btnRegenerateName.addEventListener('click', () => {
+      projectNameInput.value = generateRandomName();
+    });
+
     // Undo / Redo / Clear
     btnUndo.addEventListener('click', () => {
       if (mandala.undo()) {
@@ -453,8 +482,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // File Imports / Exports
     btnExportJSON.addEventListener('click', () => {
-      const json = mandala.exportToJSON();
-      downloadFile(json, 'mendala_project.json', 'application/json');
+      const projectName = projectNameInput.value.trim() || 'mendala_project';
+      const json = mandala.exportToJSON(projectName);
+      downloadFile(json, `${projectName}.json`, 'application/json');
     });
 
     btnImportJSON.addEventListener('click', () => {
@@ -469,6 +499,9 @@ document.addEventListener('DOMContentLoaded', () => {
       reader.onload = (event) => {
         const success = mandala.loadFromJSON(event.target.result);
         if (success) {
+          if (mandala.loadedProjectName) {
+            projectNameInput.value = mandala.loadedProjectName;
+          }
           updateLayerListUI();
           syncSlidersWithActiveLayer();
           drawAll();
@@ -626,7 +659,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add Layer Button
     btnAddLayer.addEventListener('click', () => {
       const numLayers = mandala.layers.length;
-      mandala.addLayer(`Layer ${numLayers + 1}`);
+      const defaultColors = ['#ec4899', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ffffff'];
+      const nextColor = defaultColors[numLayers % defaultColors.length];
+      
+      mandala.addLayer(`Layer ${numLayers + 1}`, 12, nextColor);
       updateLayerListUI();
       syncSlidersWithActiveLayer();
       drawAll();
@@ -741,7 +777,8 @@ document.addEventListener('DOMContentLoaded', () => {
     btnExportSVG.addEventListener('click', () => {
       const overallScale = parseInt(scaleSlider.value);
       const svg = mandala.exportToSVG(overallScale);
-      downloadFile(svg, 'mendala_design.svg', 'image/svg+xml');
+      const projectName = projectNameInput.value.trim() || 'mendala_design';
+      downloadFile(svg, `${projectName}.svg`, 'image/svg+xml');
     });
 
     btnExportSTL.addEventListener('click', () => {
@@ -749,23 +786,34 @@ document.addEventListener('DOMContentLoaded', () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'mendala_print.stl';
+      const projectName = projectNameInput.value.trim() || 'mendala_print';
+      a.download = `${projectName}.stl`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     });
 
-    btnExportOBJ.addEventListener('click', () => {
-      const blob = preview3D.exportToOBJ();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'mendala_assembly.obj';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+    btnExport3MF.addEventListener('click', () => {
+      showLoader(true);
+      preview3D.exportTo3MF()
+        .then((blob) => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          const projectName = projectNameInput.value.trim() || 'mendala_assembly';
+          a.download = `${projectName}.3mf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          showLoader(false);
+        })
+        .catch((err) => {
+          console.error("3MF Export failed:", err);
+          alert("3MF Export failed: " + err.message);
+          showLoader(false);
+        });
     });
 
     updateUndoRedoButtons();

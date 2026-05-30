@@ -1,5 +1,306 @@
 // 3D Preview Engine using Three.js
 
+// Ramer-Douglas-Peucker line simplification
+function simplifyRDP(points, epsilon) {
+  if (points.length <= 2) return points;
+  
+  let dmax = 0;
+  let index = 0;
+  const end = points.length - 1;
+  
+  const p1 = points[0];
+  const p2 = points[end];
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const lenSq = dx * dx + dy * dy;
+  
+  for (let i = 1; i < end; i++) {
+    const p = points[i];
+    let d;
+    if (lenSq === 0) {
+      const rx = p.x - p1.x;
+      const ry = p.y - p1.y;
+      d = rx * rx + ry * ry;
+    } else {
+      const t = ((p.x - p1.x) * dx + (p.y - p1.y) * dy) / lenSq;
+      const clampedT = Math.max(0, Math.min(1, t));
+      const projX = p1.x + clampedT * dx;
+      const projY = p1.y + clampedT * dy;
+      const rx = p.x - projX;
+      const ry = p.y - projY;
+      d = rx * rx + ry * ry;
+    }
+    
+    if (d > dmax) {
+      index = i;
+      dmax = d;
+    }
+  }
+  
+  if (dmax > epsilon * epsilon) {
+    const results1 = simplifyRDP(points.slice(0, index + 1), epsilon);
+    const results2 = simplifyRDP(points.slice(index), epsilon);
+    return results1.slice(0, results1.length - 1).concat(results2);
+  } else {
+    return [points[0], points[end]];
+  }
+}
+
+// Distance-based pre-filter + RDP
+function simplifyPath(points, epsilon) {
+  if (points.length <= 2) return points;
+  
+  const radialFilter = [points[0]];
+  let prev = points[0];
+  const minDistSq = (epsilon * 0.5) * (epsilon * 0.5);
+  for (let i = 1; i < points.length - 1; i++) {
+    const p = points[i];
+    const dx = p.x - prev.x;
+    const dy = p.y - prev.y;
+    if (dx * dx + dy * dy >= minDistSq) {
+      radialFilter.push(p);
+      prev = p;
+    }
+  }
+  radialFilter.push(points[points.length - 1]);
+  
+  return simplifyRDP(radialFilter, epsilon);
+}
+
+// Helper to convert a path of points into a closed 2D outline shape with round end-caps
+function createStrokeShape(pts, brushRadius) {
+  const THREE = window.THREE;
+  const numPoints = pts.length;
+  if (numPoints < 2) return null;
+  
+  const leftPts = [];
+  const rightPts = [];
+  
+  // 1. Calculate tangent and normal at each point
+  for (let i = 0; i < numPoints; i++) {
+    const curr = pts[i];
+    let tx = 0;
+    let ty = 0;
+    
+    if (i === 0) {
+      const next = pts[1];
+      tx = next.x - curr.x;
+      ty = next.y - curr.y;
+    } else if (i === numPoints - 1) {
+      const prev = pts[i - 1];
+      tx = curr.x - prev.x;
+      ty = curr.y - prev.y;
+    } else {
+      const prev = pts[i - 1];
+      const next = pts[i + 1];
+      const t1x = curr.x - prev.x;
+      const t1y = curr.y - prev.y;
+      const t2x = next.x - curr.x;
+      const t2y = next.y - curr.y;
+      
+      const len1 = Math.sqrt(t1x * t1x + t1y * t1y);
+      const len2 = Math.sqrt(t2x * t2x + t2y * t2y);
+      
+      if (len1 > 0.001 && len2 > 0.001) {
+        tx = t1x / len1 + t2x / len2;
+        ty = t1y / len1 + t2y / len2;
+      } else {
+        tx = t2x || t1x;
+        ty = t2y || t1y;
+      }
+    }
+    
+    const len = Math.sqrt(tx * tx + ty * ty);
+    if (len < 0.0001) {
+      tx = 1;
+      ty = 0;
+    } else {
+      tx /= len;
+      ty /= len;
+    }
+    
+    const nx = -ty;
+    const ny = tx;
+    
+    leftPts.push({
+      x: curr.x + nx * brushRadius,
+      y: curr.y + ny * brushRadius
+    });
+    rightPts.push({
+      x: curr.x - nx * brushRadius,
+      y: curr.y - ny * brushRadius
+    });
+  }
+  
+  // Collect all points in contour sequence
+  const outlinePoints = [];
+  
+  // Start cap: from leftPts[0] to rightPts[0] wrapping around the back
+  const p0 = pts[0];
+  const startDx = leftPts[0].x - p0.x;
+  const startDy = leftPts[0].y - p0.y;
+  const startAngle = Math.atan2(startDy, startDx);
+  
+  outlinePoints.push({ x: leftPts[0].x, y: leftPts[0].y });
+  const capSteps = 8;
+  for (let j = 1; j < capSteps; j++) {
+    const angle = startAngle + (j * Math.PI) / capSteps;
+    outlinePoints.push({
+      x: p0.x + Math.cos(angle) * brushRadius,
+      y: p0.y + Math.sin(angle) * brushRadius
+    });
+  }
+  outlinePoints.push({ x: rightPts[0].x, y: rightPts[0].y });
+  
+  // Right boundary: from start to end
+  for (let i = 1; i < numPoints; i++) {
+    outlinePoints.push({ x: rightPts[i].x, y: rightPts[i].y });
+  }
+  
+  // End cap: from rightPts[last] to leftPts[last] wrapping around the front
+  const pLast = pts[numPoints - 1];
+  const endDx = rightPts[numPoints - 1].x - pLast.x;
+  const endDy = rightPts[numPoints - 1].y - pLast.y;
+  const endAngle = Math.atan2(endDy, endDx);
+  
+  for (let j = 1; j < capSteps; j++) {
+    const angle = endAngle + (j * Math.PI) / capSteps;
+    outlinePoints.push({
+      x: pLast.x + Math.cos(angle) * brushRadius,
+      y: pLast.y + Math.sin(angle) * brushRadius
+    });
+  }
+  outlinePoints.push({ x: leftPts[numPoints - 1].x, y: leftPts[numPoints - 1].y });
+  
+  // Left boundary going backwards: from end to start
+  for (let i = numPoints - 2; i >= 1; i--) {
+    outlinePoints.push({ x: leftPts[i].x, y: leftPts[i].y });
+  }
+  
+  // Shoelace formula to verify CCW winding
+  let area = 0;
+  const n = outlinePoints.length;
+  for (let i = 0; i < n; i++) {
+    const p1 = outlinePoints[i];
+    const p2 = outlinePoints[(i + 1) % n];
+    area += p1.x * p2.y - p2.x * p1.y;
+  }
+  
+  // If CW (negative area), reverse points to make CCW
+  if (area < 0) {
+    outlinePoints.reverse();
+  }
+  
+  // Construct the Shape
+  const shape = new THREE.Shape();
+  shape.moveTo(outlinePoints[0].x, outlinePoints[0].y);
+  for (let i = 1; i < n; i++) {
+    shape.lineTo(outlinePoints[i].x, outlinePoints[i].y);
+  }
+  
+  return shape;
+}
+
+function create2DShapeForStroke(stroke, scaleFactor, brushRadius, transformPt, rotateAngle, isMirrored) {
+  const THREE = window.THREE;
+  
+  if (stroke.type === 'freehand') {
+    const rawPts = stroke.points.map(p => ({ x: p.x * scaleFactor, y: p.y * scaleFactor }));
+    const epsilon = Math.max(0.015, brushRadius * 0.04);
+    const pts = simplifyPath(rawPts, epsilon);
+    const transformedPts = pts.map(pt => transformPt(pt.x, pt.y));
+    return createStrokeShape(transformedPts, brushRadius);
+    
+  } else if (stroke.type === 'line') {
+    const p1 = transformPt(stroke.x1 * scaleFactor, stroke.y1 * scaleFactor);
+    const p2 = transformPt(stroke.x2 * scaleFactor, stroke.y2 * scaleFactor);
+    return createStrokeShape([p1, p2], brushRadius);
+    
+  } else if (stroke.type === 'circle') {
+    const center = transformPt(stroke.cx * scaleFactor, stroke.cy * scaleFactor);
+    const r = stroke.r * scaleFactor;
+    
+    const shape = new THREE.Shape();
+    shape.absarc(center.x, center.y, r + brushRadius, 0, Math.PI * 2, false);
+    
+    const innerRadius = r - brushRadius;
+    if (innerRadius > 0.001) {
+      const holePath = new THREE.Path();
+      holePath.absarc(center.x, center.y, innerRadius, 0, Math.PI * 2, true);
+      shape.holes.push(holePath);
+    }
+    return shape;
+    
+  } else if (stroke.type === 'polygon') {
+    const center = transformPt(stroke.cx * scaleFactor, stroke.cy * scaleFactor);
+    const r = stroke.r * scaleFactor;
+    const sides = stroke.sides;
+    const baseAngle = isMirrored ? -stroke.angle : stroke.angle;
+    const finalAngle = baseAngle + rotateAngle;
+    
+    const shape = new THREE.Shape();
+    for (let j = 0; j < sides; j++) {
+      const a = finalAngle + (j * Math.PI * 2) / sides;
+      const px = center.x + Math.cos(a) * (r + brushRadius);
+      const py = center.y + Math.sin(a) * (r + brushRadius);
+      if (j === 0) shape.moveTo(px, py);
+      else shape.lineTo(px, py);
+    }
+    shape.closePath();
+    
+    const innerRadius = r - brushRadius;
+    if (innerRadius > 0.001) {
+      const holePath = new THREE.Path();
+      for (let j = sides - 1; j >= 0; j--) {
+        const a = finalAngle + (j * Math.PI * 2) / sides;
+        const px = center.x + Math.cos(a) * innerRadius;
+        const py = center.y + Math.sin(a) * innerRadius;
+        if (j === sides - 1) holePath.moveTo(px, py);
+        else holePath.lineTo(px, py);
+      }
+      holePath.closePath();
+      shape.holes.push(holePath);
+    }
+    return shape;
+  }
+  return null;
+}
+
+function getSymmetricShapes(stroke, scaleFactor, brushRadius, S, mirror) {
+  const shapes = [];
+  
+  for (let i = 0; i < S; i++) {
+    const rotateAngle = (i * Math.PI * 2) / S;
+    const cosA = Math.cos(rotateAngle);
+    const sinA = Math.sin(rotateAngle);
+    
+    // Original orientation
+    const rotatePt = (x, y) => ({
+      x: x * cosA - y * sinA,
+      y: x * sinA + y * cosA
+    });
+    
+    let shape = create2DShapeForStroke(stroke, scaleFactor, brushRadius, rotatePt, rotateAngle, false);
+    if (shape) shapes.push(shape);
+    
+    // Mirrored orientation
+    if (mirror && S > 1) {
+      const mirrorRotatePt = (x, y) => {
+        const my = -y;
+        return {
+          x: x * cosA - my * sinA,
+          y: x * sinA + my * cosA
+        };
+      };
+      
+      let mirroredShape = create2DShapeForStroke(stroke, scaleFactor, brushRadius, mirrorRotatePt, rotateAngle, true);
+      if (mirroredShape) shapes.push(mirroredShape);
+    }
+  }
+  
+  return shapes;
+}
+
 export class Preview3D {
   constructor(containerId) {
     this.container = document.getElementById(containerId);
@@ -308,7 +609,7 @@ export class Preview3D {
     return points;
   }
 
-  // Extrude the 2D mandala layout into a 3D model
+  // Extrude the 2D mandala layout into a 3D model (using clean outline extrusions)
   updateModel(mandala, basePlateSettings, overallScale = 100) {
     const THREE = window.THREE;
     
@@ -340,83 +641,23 @@ export class Preview3D {
       
       const geometries = [];
       
-      // Reusable base cylinder for joints
-      const baseCylinder = new THREE.CylinderGeometry(brushRadius, brushRadius, layerHeight, 8);
-      baseCylinder.rotateX(Math.PI / 2); // Align height along Z-axis
-      
-      // Reusable unit box for segments
-      const baseBox = new THREE.BoxGeometry(1, 1, 1);
-      
       layer.strokes.forEach((stroke) => {
-        let pts = [];
-        let isClosed = false;
-        
-        if (stroke.type === 'freehand') {
-          pts = stroke.points.map(p => ({ x: p.x * scaleFactor, y: p.y * scaleFactor }));
-          isClosed = false;
-        } else if (stroke.type === 'line') {
-          pts = [
-            { x: stroke.x1 * scaleFactor, y: stroke.y1 * scaleFactor },
-            { x: stroke.x2 * scaleFactor, y: stroke.y2 * scaleFactor }
-          ];
-          isClosed = false;
-        } else if (stroke.type === 'circle') {
-          const cx = stroke.cx * scaleFactor;
-          const cy = stroke.cy * scaleFactor;
-          const r = stroke.r * scaleFactor;
-          const numSegs = Math.max(16, Math.floor(r * 1.5));
-          for (let j = 0; j < numSegs; j++) {
-            const a = (j * Math.PI * 2) / numSegs;
-            pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
-          }
-          isClosed = true;
-        } else if (stroke.type === 'polygon') {
-          const cx = stroke.cx * scaleFactor;
-          const cy = stroke.cy * scaleFactor;
-          const r = stroke.r * scaleFactor;
-          const sides = stroke.sides;
-          const angle = stroke.angle || 0;
-          for (let j = 0; j < sides; j++) {
-            const a = angle + (j * Math.PI * 2) / sides;
-            pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
-          }
-          isClosed = true;
-        }
-        
-        if (pts.length < 2) return;
-        
-        // Generate symmetric geometries
-        for (let i = 0; i < S; i++) {
-          const rotateAngle = (i * Math.PI * 2) / S;
-          
-          // Original path
-          this.addStrokeGeometries(geometries, pts, isClosed, rotateAngle, false, brushRadius, layerHeight, baseBox, baseCylinder);
-          
-          // Mirrored path
-          if (mirror && S > 1) {
-            this.addStrokeGeometries(geometries, pts, isClosed, rotateAngle, true, brushRadius, layerHeight, baseBox, baseCylinder);
-          }
-        }
+        const shapes = getSymmetricShapes(stroke, scaleFactor, brushRadius, S, mirror);
+        shapes.forEach((shape) => {
+          const currentExtrudeSettings = { depth: layerHeight, bevelEnabled: false };
+          const strokeGeo = new THREE.ExtrudeGeometry(shape, currentExtrudeSettings);
+          geometries.push(strokeGeo);
+        });
       });
-      
-      // Dispose base helpers
-      baseCylinder.dispose();
-      baseBox.dispose();
       
       // Merge all geometries into a single mesh for this layer
       if (geometries.length > 0) {
         try {
-          const mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
-          let finalGeo = mergedGeo;
-          if (THREE.BufferGeometryUtils.weld) {
-            try {
-              finalGeo = THREE.BufferGeometryUtils.weld(mergedGeo);
-            } catch (err) {
-              console.warn("Welding failed for layer:", err);
-            }
-          }
-          const layerMesh = new THREE.Mesh(finalGeo, activeMaterial);
+          let mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
+          mergedGeo = THREE.BufferGeometryUtils.mergeVertices(mergedGeo, 0.01);
+          const layerMesh = new THREE.Mesh(mergedGeo, activeMaterial);
           layerMesh.name = `Layer_${layer.name.replace(/\s+/g, '_')}`;
+          layerMesh.userData = { brushColor: layer.brushColor, type: 'layer' };
           layerMesh.castShadow = true;
           layerMesh.receiveShadow = true;
           
@@ -439,6 +680,8 @@ export class Preview3D {
     if (baseType !== 'none' && baseThickness > 0) {
       if (baseType === 'conforming-outline') {
         // Conforming backing: duplicate all strokes with an expanded brush size
+        const geometries = [];
+        
         mandala.layers.forEach((layer) => {
           if (!layer.visible || layer.strokes.length === 0) return;
           
@@ -448,86 +691,31 @@ export class Preview3D {
           // Expanded brush radius in mm: (brushSize + 2 * borderOffset) / 2
           const expandedBrushRadius = ((layer.brushSize + 2 * baseBorder) * scaleFactor * 10) / 2;
           
-          const geometries = [];
-          
-          const baseCylinder = new THREE.CylinderGeometry(expandedBrushRadius, expandedBrushRadius, baseThickness, 8);
-          baseCylinder.rotateX(Math.PI / 2);
-          
-          const baseBox = new THREE.BoxGeometry(1, 1, 1);
-          
           layer.strokes.forEach((stroke) => {
-            let pts = [];
-            let isClosed = false;
-            
-            if (stroke.type === 'freehand') {
-              pts = stroke.points.map(p => ({ x: p.x * scaleFactor, y: p.y * scaleFactor }));
-              isClosed = false;
-            } else if (stroke.type === 'line') {
-              pts = [
-                { x: stroke.x1 * scaleFactor, y: stroke.y1 * scaleFactor },
-                { x: stroke.x2 * scaleFactor, y: stroke.y2 * scaleFactor }
-              ];
-              isClosed = false;
-            } else if (stroke.type === 'circle') {
-              const cx = stroke.cx * scaleFactor;
-              const cy = stroke.cy * scaleFactor;
-              const r = stroke.r * scaleFactor;
-              const numSegs = Math.max(16, Math.floor(r * 1.5));
-              for (let j = 0; j < numSegs; j++) {
-                const a = (j * Math.PI * 2) / numSegs;
-                pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
-              }
-              isClosed = true;
-            } else if (stroke.type === 'polygon') {
-              const cx = stroke.cx * scaleFactor;
-              const cy = stroke.cy * scaleFactor;
-              const r = stroke.r * scaleFactor;
-              const sides = stroke.sides;
-              const angle = stroke.angle || 0;
-              for (let j = 0; j < sides; j++) {
-                const a = angle + (j * Math.PI * 2) / sides;
-                pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
-              }
-              isClosed = true;
-            }
-            
-            if (pts.length < 2) return;
-            
-            for (let i = 0; i < S; i++) {
-              const rotateAngle = (i * Math.PI * 2) / S;
-              this.addStrokeGeometries(geometries, pts, isClosed, rotateAngle, false, expandedBrushRadius, baseThickness, baseBox, baseCylinder);
-              if (mirror && S > 1) {
-                this.addStrokeGeometries(geometries, pts, isClosed, rotateAngle, true, expandedBrushRadius, baseThickness, baseBox, baseCylinder);
-              }
-            }
+            const shapes = getSymmetricShapes(stroke, scaleFactor, expandedBrushRadius, S, mirror);
+            shapes.forEach((shape) => {
+              const currentExtrudeSettings = { depth: baseThickness, bevelEnabled: false };
+              const strokeGeo = new THREE.ExtrudeGeometry(shape, currentExtrudeSettings);
+              geometries.push(strokeGeo);
+            });
           });
-          
-          baseCylinder.dispose();
-          baseBox.dispose();
-          
-          if (geometries.length > 0) {
-            try {
-              const mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
-              let finalGeo = mergedGeo;
-              if (THREE.BufferGeometryUtils.weld) {
-                try {
-                  finalGeo = THREE.BufferGeometryUtils.weld(mergedGeo);
-                } catch (err) {
-                  console.warn("Welding failed for conforming base:", err);
-                }
-              }
-              const conformingMesh = new THREE.Mesh(finalGeo, activeMaterial);
-              conformingMesh.name = "Base_Plate";
-              conformingMesh.castShadow = true;
-              conformingMesh.receiveShadow = true;
-              // Placed at z = 0 (bottom of strokes)
-              this.mandalaGroup.add(conformingMesh);
-            } catch (e) {
-              console.error("Error creating conforming base:", e);
-            }
-            geometries.forEach(geo => geo.dispose());
-          }
         });
+        
+        if (geometries.length > 0) {
+          try {
+            let mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
+            mergedGeo = THREE.BufferGeometryUtils.mergeVertices(mergedGeo, 0.01);
+            const conformingMesh = new THREE.Mesh(mergedGeo, activeMaterial);
+            conformingMesh.name = "Base_Plate";
+            conformingMesh.userData = { brushColor: '#e2e8f0', type: 'base' };
+            conformingMesh.castShadow = true;
+            conformingMesh.receiveShadow = true;
+            this.mandalaGroup.add(conformingMesh);
+          } catch (e) {
+            console.error("Error creating conforming base:", e);
+          }
+          geometries.forEach(geo => geo.dispose());
+        }
       } else if (baseType === 'conforming-solid') {
         // Conforming solid backing: create a solid fill backing that covers all interior areas
         const numBins = 360;
@@ -626,18 +814,17 @@ export class Preview3D {
           shape.holes.push(holePath);
         }
         
-        const extrudeSettings = {
-          depth: baseThickness,
-          bevelEnabled: false
-        };
-        const baseGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        const currentExtrudeSettings = { depth: baseThickness, bevelEnabled: false };
+        const baseGeo = new THREE.ExtrudeGeometry(shape, currentExtrudeSettings);
+        const weldedBaseGeo = THREE.BufferGeometryUtils.mergeVertices(baseGeo, 0.01);
+        baseGeo.dispose();
         
-        const baseMesh = new THREE.Mesh(baseGeo, activeMaterial);
+        const baseMesh = new THREE.Mesh(weldedBaseGeo, activeMaterial);
         baseMesh.name = "Base_Plate";
+        baseMesh.userData = { brushColor: '#e2e8f0', type: 'base' };
         baseMesh.castShadow = true;
         baseMesh.receiveShadow = true;
         
-        // Placed at z = 0 (bottom of strokes)
         this.mandalaGroup.add(baseMesh);
       } else if (baseRadius > 0) {
         // Classic solid shape base plate (circle, hexagon, octagon)
@@ -675,113 +862,22 @@ export class Preview3D {
           shape.holes.push(holePath);
         }
         
-        const extrudeSettings = {
-          depth: baseThickness,
-          bevelEnabled: false
-        };
-        const baseGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        const currentExtrudeSettings = { depth: baseThickness, bevelEnabled: false };
+        const baseGeo = new THREE.ExtrudeGeometry(shape, currentExtrudeSettings);
+        const weldedBaseGeo = THREE.BufferGeometryUtils.mergeVertices(baseGeo, 0.01);
+        baseGeo.dispose();
         
-        const baseMesh = new THREE.Mesh(baseGeo, activeMaterial);
+        const baseMesh = new THREE.Mesh(weldedBaseGeo, activeMaterial);
         baseMesh.name = "Base_Plate";
+        baseMesh.userData = { brushColor: '#e2e8f0', type: 'base' };
         baseMesh.castShadow = true;
         baseMesh.receiveShadow = true;
-        // Placed at z = 0 (extruding up to baseThickness)
         this.mandalaGroup.add(baseMesh);
       }
     }
     
     // 3. Update UI Metadata info
     this.updateStats();
-  }
-
-  // Optimize: Construct and orient geometry objects to be merged later
-  addStrokeGeometries(geometriesList, pts, isClosed, rotateAngle, isMirrored, brushRadius, layerHeight, baseBox, baseCylinder) {
-    const THREE = window.THREE;
-    
-    // Transform coordinates based on rotation and mirror state
-    const cosA = Math.cos(rotateAngle);
-    const sinA = Math.sin(rotateAngle);
-    
-    const transformedPts = pts.map(pt => {
-      let tx = pt.x;
-      let ty = pt.y;
-      if (isMirrored) {
-        ty = -ty;
-      }
-      return {
-        x: tx * cosA - ty * sinA,
-        y: tx * sinA + ty * cosA
-      };
-    });
-    
-    const numPoints = transformedPts.length;
-    const mz = layerHeight / 2;
-    
-    // Add segment boxes and start point cylinders
-    for (let i = 0; i < numPoints - 1; i++) {
-      const p1 = transformedPts[i];
-      const p2 = transformedPts[i + 1];
-      
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const length = Math.sqrt(dx * dx + dy * dy);
-      
-      if (length < 0.001) continue;
-      
-      const mx = (p1.x + p2.x) / 2;
-      const my = (p1.y + p2.y) / 2;
-      const segmentAngle = Math.atan2(dy, dx);
-      
-      // Box segment geometry
-      const boxGeo = baseBox.clone();
-      boxGeo.scale(length, brushRadius * 2, layerHeight);
-      
-      const posMatrix = new THREE.Matrix4().makeTranslation(mx, my, mz);
-      const rotMatrix = new THREE.Matrix4().makeRotationZ(segmentAngle);
-      const matrix = posMatrix.multiply(rotMatrix);
-      boxGeo.applyMatrix4(matrix);
-      geometriesList.push(boxGeo);
-      
-      // Rounded joint at segment start
-      const jointGeo = baseCylinder.clone();
-      jointGeo.translate(p1.x, p1.y, mz);
-      geometriesList.push(jointGeo);
-    }
-    
-    // End capping
-    if (isClosed && numPoints >= 3) {
-      const p1 = transformedPts[numPoints - 1];
-      const p2 = transformedPts[0];
-      
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const length = Math.sqrt(dx * dx + dy * dy);
-      
-      if (length >= 0.001) {
-        const mx = (p1.x + p2.x) / 2;
-        const my = (p1.y + p2.y) / 2;
-        const segmentAngle = Math.atan2(dy, dx);
-        
-        const boxGeo = baseBox.clone();
-        boxGeo.scale(length, brushRadius * 2, layerHeight);
-        
-        const posMatrix = new THREE.Matrix4().makeTranslation(mx, my, mz);
-        const rotMatrix = new THREE.Matrix4().makeRotationZ(segmentAngle);
-        const matrix = posMatrix.multiply(rotMatrix);
-        boxGeo.applyMatrix4(matrix);
-        geometriesList.push(boxGeo);
-        
-        const jointGeo = baseCylinder.clone();
-        jointGeo.translate(p1.x, p1.y, mz);
-        geometriesList.push(jointGeo);
-      }
-    } else if (!isClosed) {
-      // Open path: add cylinder to cap the final point
-      const pLast = transformedPts[numPoints - 1];
-      const jointGeo = baseCylinder.clone();
-      jointGeo.translate(pLast.x, pLast.y, mz);
-      geometriesList.push(jointGeo);
-    }
   }
 
   // Update triangle counts and display boundaries
@@ -863,10 +959,11 @@ export class Preview3D {
         const indexAttr = geom.index;
         
         if (indexAttr) {
+          const indices = indexAttr.array;
           for (let i = 0; i < indexAttr.count; i += 3) {
-            const idx1 = indexAttr.getX(i);
-            const idx2 = indexAttr.getX(i + 1);
-            const idx3 = indexAttr.getX(i + 2);
+            const idx1 = indices[i];
+            const idx2 = indices[i + 1];
+            const idx3 = indices[i + 2];
             
             tempV1.set(positionAttr.getX(idx1), positionAttr.getY(idx1), positionAttr.getZ(idx1)).applyMatrix4(matrix);
             tempV2.set(positionAttr.getX(idx2), positionAttr.getY(idx2), positionAttr.getZ(idx2)).applyMatrix4(matrix);
@@ -956,23 +1053,24 @@ export class Preview3D {
   exportToOBJ() {
     const THREE = window.THREE;
     let objText = "# Mendala Multi-Color Assembly OBJ\n# Generated by Mendala\n\n";
-    let vertexOffset = 1; // OBJ is 1-indexed
     
+    // Ensure matrices are updated
     this.scene.updateMatrixWorld(true);
+    
+    let totalVertices = 0;
     
     this.mandalaGroup.children.forEach((mesh) => {
       if (!mesh.isMesh || !mesh.geometry) return;
       
       const geom = mesh.geometry;
-      const name = mesh.name || "Object";
-      
-      objText += `g ${name}\n`;
-      objText += `o ${name}\n`;
-      
       const positionAttr = geom.attributes.position;
       if (!positionAttr) return;
       
-      // Write vertices
+      const name = mesh.name || "Object";
+      objText += `o ${name}\n`;
+      objText += `g ${name}\n`;
+      
+      // 1. Write vertices for this mesh
       const matrix = mesh.matrixWorld;
       const tempV = new THREE.Vector3();
       for (let i = 0; i < positionAttr.count; i++) {
@@ -980,28 +1078,192 @@ export class Preview3D {
         objText += `v ${tempV.x.toFixed(4)} ${tempV.y.toFixed(4)} ${tempV.z.toFixed(4)}\n`;
       }
       
-      // Write faces
+      const startIdx = totalVertices + 1; // 1-based index offset
+      
+      // 2. Write faces for this mesh
       const indexAttr = geom.index;
       if (indexAttr) {
+        const indices = indexAttr.array;
         for (let i = 0; i < indexAttr.count; i += 3) {
-          const v1 = indexAttr.getX(i) + vertexOffset;
-          const v2 = indexAttr.getX(i + 1) + vertexOffset;
-          const v3 = indexAttr.getX(i + 2) + vertexOffset;
+          const v1 = indices[i] + startIdx;
+          const v2 = indices[i + 1] + startIdx;
+          const v3 = indices[i + 2] + startIdx;
           objText += `f ${v1} ${v2} ${v3}\n`;
         }
       } else {
         for (let i = 0; i < positionAttr.count; i += 3) {
-          const v1 = i + vertexOffset;
-          const v2 = i + 1 + vertexOffset;
-          const v3 = i + 2 + vertexOffset;
+          const v1 = i + startIdx;
+          const v2 = i + 1 + startIdx;
+          const v3 = i + 2 + startIdx;
           objText += `f ${v1} ${v2} ${v3}\n`;
         }
       }
       
-      vertexOffset += positionAttr.count;
       objText += "\n";
+      totalVertices += positionAttr.count;
     });
     
     return new Blob([objText], { type: 'text/plain' });
+  }
+
+  // Export current meshes in group as a Multi-Color/Multi-Part 3MF zip file
+  async exportTo3MF() {
+    const THREE = window.THREE;
+    const JSZip = window.JSZip;
+    if (!JSZip) {
+      throw new Error("JSZip library not loaded. Check your internet connection or CDN configuration.");
+    }
+
+    // Ensure matrices are updated
+    this.scene.updateMatrixWorld(true);
+
+    const zip = new JSZip();
+
+    // 1. Gather all meshes in mandalaGroup
+    const meshes = [];
+    this.mandalaGroup.traverse((node) => {
+      if (node.isMesh && node.geometry) {
+        meshes.push(node);
+      }
+    });
+
+    if (meshes.length === 0) {
+      throw new Error("No meshes to export");
+    }
+
+    // 2. Identify unique colors and map them to base materials
+    const uniqueColors = [];
+    const colorIndexMap = new Map();
+
+    const getHexColor = (colorVal) => {
+      if (typeof colorVal === 'string') {
+        let hex = colorVal.trim();
+        if (hex.startsWith('#')) return hex.toUpperCase();
+        return '#CCCCCC';
+      }
+      if (colorVal && typeof colorVal.getHexString === 'function') {
+        return '#' + colorVal.getHexString().toUpperCase();
+      }
+      return '#CCCCCC';
+    };
+
+    meshes.forEach((mesh) => {
+      let colorStr = '#CCCCCC';
+      if (mesh.userData && mesh.userData.brushColor) {
+        colorStr = getHexColor(mesh.userData.brushColor);
+      } else if (mesh.material && mesh.material.color) {
+        colorStr = getHexColor(mesh.material.color);
+      }
+      
+      if (!colorIndexMap.has(colorStr)) {
+        colorIndexMap.set(colorStr, uniqueColors.length);
+        uniqueColors.push(colorStr);
+      }
+    });
+
+    // 3. Build 3D/3dmodel.model XML string
+    let modelXml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n' +
+      '  <metadata name="Title">Mendala Design</metadata>\n' +
+      '  <metadata name="Application">Mendala Radial 3D Print Designer</metadata>\n' +
+      '  <resources>\n' +
+      '    <basematerials id="1">\n';
+
+    uniqueColors.forEach((color, idx) => {
+      modelXml += '      <base name="Color_' + (idx + 1) + '" displaycolor="' + color + '" />\n';
+    });
+
+    modelXml += '    </basematerials>\n\n';
+
+    let objectId = 2;
+    const meshObjectIds = [];
+
+    // Map to store geometry XML for each mesh
+    meshes.forEach((mesh) => {
+      const geom = mesh.geometry;
+      const matrix = mesh.matrixWorld;
+      
+      const positionAttr = geom.attributes.position;
+      if (!positionAttr) return;
+
+      const indexAttr = geom.index;
+      const tempV = new THREE.Vector3();
+      const currentMeshId = objectId++;
+      const nameVal = mesh.name || ('Part_' + currentMeshId);
+      meshObjectIds.push({ id: currentMeshId, name: nameVal });
+
+      modelXml += '    <object id="' + currentMeshId + '" type="model" name="' + nameVal + '">\n';
+      modelXml += '      <mesh>\n';
+      modelXml += '        <vertices>\n';
+
+      // Write vertices
+      for (let i = 0; i < positionAttr.count; i++) {
+        tempV.set(positionAttr.getX(i), positionAttr.getY(i), positionAttr.getZ(i)).applyMatrix4(matrix);
+        modelXml += '          <vertex x="' + tempV.x.toFixed(4) + '" y="' + tempV.y.toFixed(4) + '" z="' + tempV.z.toFixed(4) + '" />\n';
+      }
+
+      modelXml += '        </vertices>\n';
+      modelXml += '        <triangles>\n';
+
+      // Get color index for this mesh
+      let colorStr = '#CCCCCC';
+      if (mesh.userData && mesh.userData.brushColor) {
+        colorStr = getHexColor(mesh.userData.brushColor);
+      } else if (mesh.material && mesh.material.color) {
+        colorStr = getHexColor(mesh.material.color);
+      }
+      const colorIndex = colorIndexMap.get(colorStr) || 0;
+
+      // Write triangles (indexAttr exists since we welded)
+      if (indexAttr) {
+        const indices = indexAttr.array;
+        for (let i = 0; i < indexAttr.count; i += 3) {
+          modelXml += '          <triangle v1="' + indices[i] + '" v2="' + indices[i + 1] + '" v3="' + indices[i + 2] + '" pid="1" pindex="' + colorIndex + '" />\n';
+        }
+      } else {
+        for (let i = 0; i < positionAttr.count; i += 3) {
+          modelXml += '          <triangle v1="' + i + '" v2="' + (i + 1) + '" v3="' + (i + 2) + '" pid="1" pindex="' + colorIndex + '" />\n';
+        }
+      }
+
+      modelXml += '        </triangles>\n';
+      modelXml += '      </mesh>\n';
+      modelXml += '    </object>\n\n';
+    });
+
+    // Create assembly group containing all mesh components
+    const assemblyId = objectId++;
+    modelXml += '    <object id="' + assemblyId + '" type="model" name="Mandala_Assembly">\n';
+    modelXml += '      <components>\n';
+    meshObjectIds.forEach((item) => {
+      modelXml += '        <component objectid="' + item.id + '" />\n';
+    });
+    modelXml += '      </components>\n';
+    modelXml += '    </object>\n';
+
+    modelXml += '  </resources>\n';
+    modelXml += '  <build>\n';
+    modelXml += '    <item objectid="' + assemblyId + '" />\n';
+    modelXml += '  </build>\n';
+    modelXml += '</model>\n';
+
+    // 4. Create OPC package structure
+    const contentTypesXml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n' +
+      '  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n' +
+      '  <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>\n' +
+      '</Types>';
+
+    const relsXml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n' +
+      '  <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>\n' +
+      '</Relationships>';
+
+    zip.file("[Content_Types].xml", contentTypesXml);
+    zip.file("_rels/.rels", relsXml);
+    zip.file("3D/3dmodel.model", modelXml);
+
+    const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+    return blob;
   }
 }

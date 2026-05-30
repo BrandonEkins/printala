@@ -120,6 +120,77 @@ body {
   margin: 0 6px;
 }
 
+.project-name-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  padding: 2px 6px 2px 12px;
+  height: 38px;
+  transition: all var(--transition-fast);
+}
+
+.project-name-container:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background-color: var(--bg-active);
+}
+
+.project-name-container:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 10px rgba(236, 72, 153, 0.15);
+  background-color: rgba(15, 23, 42, 0.8);
+}
+
+.project-name-input {
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+  width: 180px;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+.project-name-input::placeholder {
+  color: var(--text-dim);
+}
+
+.btn-regenerate-name {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.btn-regenerate-name:hover {
+  color: var(--color-primary);
+  background-color: rgba(236, 72, 153, 0.1);
+}
+
+.btn-regenerate-name:active {
+  transform: scale(0.92);
+}
+
+.btn-regenerate-name svg {
+  transition: transform var(--transition-normal);
+}
+
+.btn-regenerate-name:hover svg {
+  transform: rotate(180deg);
+}
+
 /* Buttons Styling */
 button {
   font-family: var(--font-sans);
