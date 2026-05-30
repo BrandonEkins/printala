@@ -300,16 +300,17 @@ function polyTreeToShapes(polyTree, scale = 10000) {
   const shapes = [];
   
   function traverse(node, parentShape) {
-    const children = node.Childs;
+    const children = typeof node.Childs === 'function' ? node.Childs() : node.Childs;
     if (!children) return;
     for (let i = 0; i < children.length; i++) {
       const child = children[i];
-      const contour = child.Contour;
+      const contour = typeof child.Contour === 'function' ? child.Contour() : child.Contour;
       
       if (contour && contour.length > 0) {
         const pts = contour.map(pt => new THREE.Vector2(pt.X / scale, pt.Y / scale));
         
-        if (!child.IsHole) {
+        const isHole = typeof child.IsHole === 'function' ? child.IsHole() : child.IsHole;
+        if (!isHole) {
           const shape = new THREE.Shape(pts);
           shapes.push(shape);
           traverse(child, shape);
