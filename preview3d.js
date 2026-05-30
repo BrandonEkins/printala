@@ -535,7 +535,10 @@ export class Preview3D {
       // Update materials on all children of mandala group
       this.mandalaGroup.traverse((child) => {
         if (child.isMesh) {
-          child.material = mat;
+          const hexColor = child.userData && child.userData.brushColor ? child.userData.brushColor : '#CCCCCC';
+          const newMat = mat.clone();
+          newMat.color = new THREE.Color(hexColor);
+          child.material = newMat;
         }
       });
     }
@@ -723,7 +726,9 @@ export class Preview3D {
           try {
             let mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
             mergedGeo = THREE.BufferGeometryUtils.mergeVertices(mergedGeo, 0.01);
-            const layerMesh = new THREE.Mesh(mergedGeo, activeMaterial);
+            const layerMat = activeMaterial.clone();
+            layerMat.color = new THREE.Color(layer.brushColor);
+            const layerMesh = new THREE.Mesh(mergedGeo, layerMat);
             layerMesh.name = `Layer_${layer.name.replace(/\s+/g, '_')}`;
             layerMesh.userData = { brushColor: layer.brushColor, type: 'layer' };
             layerMesh.castShadow = true;
@@ -803,7 +808,9 @@ export class Preview3D {
             try {
               let mergedGeo = THREE.BufferGeometryUtils.mergeBufferGeometries(geometries);
               mergedGeo = THREE.BufferGeometryUtils.mergeVertices(mergedGeo, 0.01);
-              const conformingMesh = new THREE.Mesh(mergedGeo, activeMaterial);
+              const baseMat = activeMaterial.clone();
+              baseMat.color = new THREE.Color('#e2e8f0');
+              const conformingMesh = new THREE.Mesh(mergedGeo, baseMat);
               conformingMesh.name = "Base_Plate";
               conformingMesh.userData = { brushColor: '#e2e8f0', type: 'base' };
               conformingMesh.castShadow = true;
@@ -924,7 +931,9 @@ export class Preview3D {
         const weldedBaseGeo = THREE.BufferGeometryUtils.mergeVertices(baseGeo, 0.01);
         baseGeo.dispose();
         
-        const baseMesh = new THREE.Mesh(weldedBaseGeo, activeMaterial);
+        const baseMat = activeMaterial.clone();
+        baseMat.color = new THREE.Color('#e2e8f0');
+        const baseMesh = new THREE.Mesh(weldedBaseGeo, baseMat);
         baseMesh.name = "Base_Plate";
         baseMesh.userData = { brushColor: '#e2e8f0', type: 'base' };
         baseMesh.castShadow = true;
@@ -984,7 +993,9 @@ export class Preview3D {
         const weldedBaseGeo = THREE.BufferGeometryUtils.mergeVertices(baseGeo, 0.01);
         baseGeo.dispose();
         
-        const baseMesh = new THREE.Mesh(weldedBaseGeo, activeMaterial);
+        const baseMat = activeMaterial.clone();
+        baseMat.color = new THREE.Color('#e2e8f0');
+        const baseMesh = new THREE.Mesh(weldedBaseGeo, baseMat);
         baseMesh.name = "Base_Plate";
         baseMesh.userData = { brushColor: '#e2e8f0', type: 'base' };
         baseMesh.castShadow = true;
