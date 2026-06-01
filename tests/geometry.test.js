@@ -78,6 +78,7 @@ async function runTests() {
       .replace(/export function/g, 'function');
       
     eval(preview3dCode + `
+      global.Preview3D = Preview3D;
       global.createStrokeOutline = createStrokeOutline;
       global.getSymmetricContours = getSymmetricContours;
       global.polyTreeToShapes = polyTreeToShapes;
@@ -252,6 +253,63 @@ async function runTests() {
     console.log('✔ Case C passed: Non-manifold edge correctly detected');
 
     console.log('✔ Test 3 passed successfully');
+
+    // ----------------------------------------------------
+    // Test 4: Predictive Hole Placement and Sizing
+    // ----------------------------------------------------
+    console.log('\nRunning Test 4: Predictive hole placement & sizing...');
+    const preview3dInst = Object.create(global.Preview3D.prototype);
+
+    const basePlateSettings = {
+      addHole: true,
+      holeSize: 6.0,      // preferred diameter (radius 3.0)
+      holeDistance: 5.0,  // preferred distance from boundary
+      holeAngle: 90       // target angle in degrees (1.5708 rad)
+    };
+    const boundaryRadiusFn = () => 50.0; // constant boundary of 50mm
+
+    // Case A: No drawn points
+    const optEmpty = preview3dInst.getOptimalHoleParameters(basePlateSettings, boundaryRadiusFn, []);
+    console.log('Empty canvas hole report:', optEmpty);
+    // Should be at target angle, target distance, target size
+    assert.ok(Math.abs(optEmpty.theta - Math.PI / 2) < 1e-5, 'Empty canvas hole should be at target angle (90 deg)');
+    assert.strictEqual(optEmpty.radius, 3.0, 'Empty canvas hole should have preferred radius');
+    assert.strictEqual(optEmpty.distance, 45.0, 'Empty canvas hole should be at preferred distance from boundary');
+    console.log('✔ Case A passed: Preferred position & size chosen when no lines block');
+
+    // Case B: Drawn point blocking the exact preferred hole position (0, 45)
+    // Point at 0,45 with halfBrush = 3.0
+    const pointsBlocked = [
+      { x: 0.0, y: 45.0, halfBrush: 3.0 }
+    ];
+    const optBlocked = preview3dInst.getOptimalHoleParameters(basePlateSettings, boundaryRadiusFn, pointsBlocked);
+    console.log('Blocked canvas hole report:', optBlocked);
+    // Should shift away from 90 deg (theta !== Math.PI/2)
+    assert.ok(Math.abs(optBlocked.theta - Math.PI / 2) > 0.05, 'Hole should shift away from blocked angle');
+    console.log('✔ Case B passed: Hole shifts angle to avoid blocking line');
+
+    // Case C: Tight space requiring size reduction
+    // Place blocking points covering the entire search cone (30 to 150 degrees) and radial offsets (35 to 47 mm)
+    // to leave no completely clear spot for a full-size hole.
+    const pointsTight = [];
+    for (let angleDeg = 30; angleDeg <= 150; angleDeg += 5) {
+      const rad = (angleDeg * Math.PI) / 180;
+      for (let dist = 35; dist <= 47; dist += 3) {
+        pointsTight.push({
+          x: Math.cos(rad) * dist,
+          y: Math.sin(rad) * dist,
+          halfBrush: 2.0
+        });
+      }
+    }
+    const optTight = preview3dInst.getOptimalHoleParameters(basePlateSettings, boundaryRadiusFn, pointsTight);
+    console.log('Tight space hole report:', optTight);
+    // Expected to shrink the radius
+    assert.ok(optTight.radius < 3.0, 'Hole size should be reduced in a tight space');
+    console.log('✔ Case C passed: Hole size is dynamically reduced to fit narrow clear zone');
+
+    console.log('✔ Test 4 passed successfully');
+
     console.log('\nAll geometry, extrusion, and manifold tests passed with flying colors! 🎉');
     process.exit(0);
     

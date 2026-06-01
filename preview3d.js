@@ -640,6 +640,83 @@ export class Preview3D {
     return points;
   }
 
+  // Finds optimal placement and size for the hanging hole to avoid drawn strokes
+  getOptimalHoleParameters(basePlateSettings, getBoundaryRadius, drawnPoints) {
+    const preferredRadius = basePlateSettings.holeSize / 2;
+    const preferredDistance = basePlateSettings.holeDistance !== undefined ? basePlateSettings.holeDistance : 5.0;
+    const targetAngleDeg = basePlateSettings.holeAngle !== undefined ? basePlateSettings.holeAngle : 90;
+    const targetTheta = (targetAngleDeg * Math.PI) / 180;
+
+    let bestTheta = targetTheta;
+    let bestHoleDist = 10;
+    let bestHoleRadius = preferredRadius;
+    let bestScore = Infinity;
+
+    // Optimization: filter to outer points near potential hole radius
+    const outerPoints = drawnPoints.filter(pt => {
+      return (pt.x * pt.x + pt.y * pt.y) > 400; // d > 20mm
+    });
+
+    const angleStep = (2 * Math.PI) / 180; // 2 degrees
+    const angleRange = 60 * (Math.PI / 180); // 60 degrees
+
+    for (let dt = -angleRange; dt <= angleRange; dt += angleStep) {
+      const currentTheta = targetTheta + dt;
+      const boundaryRadius = getBoundaryRadius(currentTheta);
+
+      // Try different distances from the edge (0 to 8mm in steps of 1mm)
+      for (let distOffset = 0; distOffset <= 8; distOffset += 1.0) {
+        const currentHoleDist = Math.max(preferredRadius * 2, boundaryRadius - (preferredDistance + distOffset));
+
+        // Try different sizes (preferred down to min(preferred, 1.25mm) in steps of 0.25mm)
+        const minRadius = Math.max(1.25, preferredRadius - 1.0);
+        for (let currentHoleRadius = preferredRadius; currentHoleRadius >= minRadius; currentHoleRadius -= 0.25) {
+          
+          const hx = Math.cos(currentTheta) * currentHoleDist;
+          const hy = Math.sin(currentTheta) * currentHoleDist;
+
+          let maxOverlap = 0;
+          let overlapSum = 0;
+
+          for (let p = 0; p < outerPoints.length; p++) {
+            const pt = outerPoints[p];
+            const dx = pt.x - hx;
+            const dy = pt.y - hy;
+            const d2 = dx * dx + dy * dy;
+            const minDist = currentHoleRadius + pt.halfBrush + 1.0; // 1mm safety padding
+            if (d2 < minDist * minDist) {
+              const d = Math.sqrt(d2);
+              const overlap = minDist - d;
+              if (overlap > maxOverlap) maxOverlap = overlap;
+              overlapSum += overlap;
+            }
+          }
+
+          const angleDiff = Math.abs(dt);
+          const distDiff = distOffset;
+          const sizeDiff = preferredRadius - currentHoleRadius;
+
+          // Score candidate
+          const score = (maxOverlap * 10000) + (overlapSum * 5000) +
+                        (angleDiff * 25) + (distDiff * 8) + (sizeDiff * 30);
+
+          if (score < bestScore) {
+            bestScore = score;
+            bestTheta = currentTheta;
+            bestHoleDist = currentHoleDist;
+            bestHoleRadius = currentHoleRadius;
+          }
+        }
+      }
+    }
+
+    return {
+      theta: bestTheta,
+      distance: bestHoleDist,
+      radius: bestHoleRadius
+    };
+  }
+
   // Extrude the 2D mandala layout into a 3D model (using clean outline extrusions)
   updateModel(mandala, basePlateSettings, overallScale = 100) {
     const THREE = window.THREE;
@@ -934,21 +1011,21 @@ export class Preview3D {
         
         // Add hanging hole if enabled
         if (basePlateSettings.addHole && basePlateSettings.holeSize > 0) {
-          const holeRadius = basePlateSettings.holeSize / 2;
-          const angleDeg = basePlateSettings.holeAngle !== undefined ? basePlateSettings.holeAngle : 90;
-          const theta = (angleDeg * Math.PI) / 180;
-          let bin = Math.floor((angleDeg / 360) * 360) % 360;
-          if (bin < 0) bin += 360;
-          const boundaryRadius = smoothedR[bin] + baseBorder;
-          const holeDist = Math.max(holeRadius * 2, boundaryRadius - basePlateSettings.holeDistance);
-          const holeX = Math.cos(theta) * holeDist;
-          const holeY = Math.sin(theta) * holeDist;
+          const opt = this.getOptimalHoleParameters(basePlateSettings, (theta) => {
+            let deg = (theta * 180) / Math.PI;
+            let bin = Math.floor((deg / 360) * numBins) % numBins;
+            if (bin < 0) bin += numBins;
+            return smoothedR[bin] + baseBorder;
+          }, drawnPoints);
+
+          const holeX = Math.cos(opt.theta) * opt.distance;
+          const holeY = Math.sin(opt.theta) * opt.distance;
           const holePath = new THREE.Path();
           const numHoleSegs = 32;
           for (let i = 0; i < numHoleSegs; i++) {
             const a = (i * Math.PI * -2) / numHoleSegs;
-            if (i === 0) holePath.moveTo(holeX + Math.cos(a) * holeRadius, holeY + Math.sin(a) * holeRadius);
-            else holePath.lineTo(holeX + Math.cos(a) * holeRadius, holeY + Math.sin(a) * holeRadius);
+            if (i === 0) holePath.moveTo(holeX + Math.cos(a) * opt.radius, holeY + Math.sin(a) * opt.radius);
+            else holePath.lineTo(holeX + Math.cos(a) * opt.radius, holeY + Math.sin(a) * opt.radius);
           }
           holePath.closePath();
           shape.holes.push(holePath);
@@ -999,18 +1076,17 @@ export class Preview3D {
         
         // Add hanging hole if enabled
         if (basePlateSettings.addHole && basePlateSettings.holeSize > 0) {
-          const holeRadius = basePlateSettings.holeSize / 2;
-          const angleDeg = basePlateSettings.holeAngle !== undefined ? basePlateSettings.holeAngle : 90;
-          const theta = (angleDeg * Math.PI) / 180;
-          const holeDist = Math.max(holeRadius * 2, baseRadius - basePlateSettings.holeDistance);
-          const holeX = Math.cos(theta) * holeDist;
-          const holeY = Math.sin(theta) * holeDist;
+          const drawnPoints = this.getDrawnPoints(mandala, scaleFactor);
+          const opt = this.getOptimalHoleParameters(basePlateSettings, () => baseRadius, drawnPoints);
+
+          const holeX = Math.cos(opt.theta) * opt.distance;
+          const holeY = Math.sin(opt.theta) * opt.distance;
           const holePath = new THREE.Path();
           const numHoleSegs = 32;
           for (let i = 0; i < numHoleSegs; i++) {
             const a = (i * Math.PI * -2) / numHoleSegs;
-            if (i === 0) holePath.moveTo(holeX + Math.cos(a) * holeRadius, holeY + Math.sin(a) * holeRadius);
-            else holePath.lineTo(holeX + Math.cos(a) * holeRadius, holeY + Math.sin(a) * holeRadius);
+            if (i === 0) holePath.moveTo(holeX + Math.cos(a) * opt.radius, holeY + Math.sin(a) * opt.radius);
+            else holePath.lineTo(holeX + Math.cos(a) * opt.radius, holeY + Math.sin(a) * opt.radius);
           }
           holePath.closePath();
           shape.holes.push(holePath);
