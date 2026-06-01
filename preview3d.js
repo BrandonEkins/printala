@@ -1461,7 +1461,7 @@ export class Preview3D {
 
     const relsXml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n' +
-      '  <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>\n' +
+      '  <Relationship Target="3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>\n' +
       '</Relationships>';
 
     zip.file("[Content_Types].xml", contentTypesXml);

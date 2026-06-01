@@ -35,7 +35,7 @@ export function smoothPoints(pts, windowSize) {
 }
 
 export class MandalaLayer {
-  constructor(id, name, symmetry = 12, brushColor = '#ec4899', brushSize = 0.5, height = 1.0) {
+  constructor(id, name, symmetry = 8, brushColor = '#ec4899', brushSize = 0.5, height = 0.5) {
     this.id = id;
     this.name = name;
     this.symmetry = symmetry;
@@ -44,7 +44,7 @@ export class MandalaLayer {
     this.brushSize = brushSize; // In mm (physical width)
     this.height = height; // In mm (physical thickness)
     this.visible = true;
-    this.smoothing = 5; // Default smoothing level: 5
+    this.smoothing = 10; // Default smoothing level: 10
     this.strokes = []; // Array of stroke objects
   }
 
@@ -77,7 +77,7 @@ export class Mandala {
   }
 
   // Add a new layer
-  addLayer(name, symmetry = 12, brushColor = '#ec4899', brushSize = 0.5, height = 1.0) {
+  addLayer(name, symmetry = 8, brushColor = '#ec4899', brushSize = 0.5, height = 0.5) {
     const id = 'layer-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
     const newLayer = new MandalaLayer(id, name, symmetry, brushColor, brushSize, height);
     

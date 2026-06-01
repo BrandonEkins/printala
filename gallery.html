@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mendala Gallery — Saved Designs</title>
+  
+  <!-- Font Integration -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-deep: #080c14;
+      --bg-panel: rgba(15, 23, 42, 0.65);
+      --bg-card: rgba(30, 41, 59, 0.45);
+      --bg-active: rgba(255, 255, 255, 0.08);
+      
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(236, 72, 153, 0.2);
+      
+      --color-primary: #ec4899;
+      --color-primary-hover: #f472b6;
+      --color-secondary: #3b82f6;
+      --color-accent: #06b6d4;
+      --color-danger: #ef4444;
+      --color-danger-hover: #f87171;
+      
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      
+      --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+      --shadow-glow: 0 0 15px rgba(236, 72, 153, 0.25);
+      
+      --border-radius-sm: 8px;
+      --border-radius-md: 12px;
+      --border-radius-lg: 20px;
+      
+      --transition-fast: 0.15s ease;
+      --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-deep);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Header */
+    .app-header {
+      height: 72px;
+      background-color: rgba(8, 12, 20, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 40px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      color: var(--color-primary);
+      filter: drop-shadow(0 0 6px rgba(236, 72, 153, 0.5));
+      animation: logo-spin 60s linear infinite;
+    }
+
+    @keyframes logo-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .logo-text h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #fff 30%, var(--color-primary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .logo-text span {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 400;
+      display: block;
+      letter-spacing: 0.5px;
+    }
+
+    /* Main Container */
+    .gallery-container {
+      flex: 1;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    /* Filters Bar */
+    .filter-bar {
+      background-color: var(--bg-panel);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius-md);
+      padding: 20px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .search-input-wrapper {
+      position: relative;
+      flex: 1;
+      min-width: 280px;
+    }
+
+    .search-input {
+      width: 100%;
+      background-color: rgba(8, 12, 20, 0.5);
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius-sm);
+      color: var(--text-main);
+      padding: 12px 16px 12px 42px;
+      font-size: 14px;
+      outline: none;
+      transition: all var(--transition-fast);
+    }
+
+    .search-input:focus {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 10px rgba(236, 72, 153, 0.15);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim);
+      pointer-events: none;
+    }
+
+    .filter-controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .filter-select {
+      background-color: rgba(8, 12, 20, 0.5);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 12px 16px;
+      border-radius: var(--border-radius-sm);
+      outline: none;
+      cursor: pointer;
+      font-size: 14px;
+      transition: border-color var(--transition-fast);
+    }
+
+    .filter-select:focus {
+      border-color: var(--color-primary);
+    }
+
+    /* Grid Layout */
+    .designs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 28px;
+    }
+
+    /* Card Design */
+    .design-card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius-lg);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: all var(--transition-normal);
+      box-shadow: var(--shadow-lg);
+      position: relative;
+    }
+
+    .design-card:hover {
+      transform: translateY(-6px);
+      border-color: var(--color-primary);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(236, 72, 153, 0.15);
+    }
+
+    .card-header {
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      border-bottom: 1px solid var(--border-color);
+      background-color: rgba(15, 23, 42, 0.2);
+    }
+
+    .design-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .design-date {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+    }
+
+    .thumbnail-container {
+      background-color: #04060b;
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: pointer;
+      overflow: hidden;
+    }
+
+    .thumbnail-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      transition: transform var(--transition-normal);
+    }
+
+    .design-card:hover .thumbnail-canvas {
+      transform: scale(1.04);
+    }
+
+    .card-info {
+      padding: 14px 20px;
+      display: flex;
+      justify-content: space-around;
+      background-color: rgba(8, 12, 20, 0.3);
+      border-top: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--border-color);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .info-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .info-val {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .card-footer {
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      align-items: center;
+      background-color: rgba(15, 23, 42, 0.2);
+    }
+
+    /* Buttons */
+    .btn {
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 10px 14px;
+      border-radius: var(--border-radius-sm);
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all var(--transition-fast);
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background-color: var(--color-primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--color-primary-hover);
+      box-shadow: var(--shadow-glow);
+    }
+
+    .btn-secondary {
+      background-color: var(--bg-card);
+      border-color: var(--border-color);
+      color: var(--text-main);
+    }
+
+    .btn-secondary:hover {
+      background-color: var(--bg-active);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+
+    .btn-danger {
+      background-color: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.2);
+      color: var(--color-danger);
+      padding: 10px;
+    }
+
+    .btn-danger:hover {
+      background-color: var(--color-danger);
+      color: #fff;
+    }
+
+    /* Empty State */
+    .empty-state {
+      background-color: var(--bg-panel);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius-lg);
+      padding: 80px 40px;
+      text-align: center;
+      max-width: 600px;
+      margin: 60px auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .empty-icon {
+      color: var(--text-dim);
+      filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.05));
+    }
+
+    .empty-state h3 {
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .empty-state p {
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1.6;
+      max-width: 440px;
+    }
+
+    /* Loading Spinner */
+    .loader-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 120px 0;
+      gap: 16px;
+      color: var(--text-muted);
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid var(--border-color);
+      border-top-color: var(--color-primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <div class="logo-area">
+      <svg class="logo-icon" viewBox="0 0 100 100" width="36" height="36">
+        <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="2, 2" />
+        <circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" stroke-width="3" />
+        <circle cx="50" cy="50" r="15" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <path d="M 50,5 L 50,95 M 5,50 L 95,50 M 18.2,18.2 L 81.8,81.8 M 18.2,81.8 L 81.8,18.2" stroke="currentColor" stroke-width="1" opacity="0.5" />
+      </svg>
+      <div class="logo-text">
+        <h1>Mendala Gallery</h1>
+        <span>Saves Explorer</span>
+      </div>
+    </div>
+
+    <div>
+      <a href="index.html" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+        </svg>
+        Back to Editor
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Grid Area -->
+  <main class="gallery-container">
+    
+    <!-- Filter Bar -->
+    <section class="filter-bar">
+      <div class="search-input-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="search-input" class="search-input" placeholder="Search saved designs by name...">
+      </div>
+
+      <div class="filter-controls">
+        <select id="sort-select" class="filter-select">
+          <option value="newest">Sort by: Date (Newest)</option>
+          <option value="oldest">Sort by: Date (Oldest)</option>
+          <option value="complexity-desc">Sort by: Complexity (High)</option>
+          <option value="complexity-asc">Sort by: Complexity (Low)</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- Grid / Status Content -->
+    <section id="content-area">
+      <div class="loader-container" id="loading-spinner">
+        <div class="spinner"></div>
+        <span>Scanning for saved designs...</span>
+      </div>
+      
+      <div class="designs-grid" id="designs-grid" style="display: none;"></div>
+      
+      <div class="empty-state" id="empty-state" style="display: none;">
+        <svg class="empty-icon" viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <circle cx="9" cy="9" r="2"></circle>
+          <path d="M21 15l-3.086-3.086a2 2 0 00-2.828 0L6 21"></path>
+        </svg>
+        <h3>No saved designs found</h3>
+        <p>We searched your Mendala workspace but couldn't find any saved project JSON files. Start creating beautiful symmetrical designs and click "Save" in the editor!</p>
+        <a href="index.html" class="btn btn-primary" style="margin-top: 8px;">Create New Design</a>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { presets } from './presets.js';
+
+    let allDesigns = [];
+
+    // Helper to escape HTML characters and prevent DOM XSS vulnerabilities
+    function escapeHTML(str) {
+      if (!str) return '';
+      return str.replace(/[&<>"']/g, m => {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return map[m];
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadDesigns();
+      
+      // Hook up filtering/sorting
+      document.getElementById('search-input').addEventListener('input', applyFilters);
+      document.getElementById('sort-select').addEventListener('change', applyFilters);
+    });
+
+    function getBadgeDetails(location) {
+      switch (location) {
+        case 'preset':
+          return { text: 'Featured', bg: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: 'rgba(245, 158, 11, 0.3)' };
+        case 'browser':
+          return { text: 'Browser Save', bg: 'rgba(16, 185, 129, 0.15)', color: 'var(--color-success)', border: 'rgba(16, 185, 129, 0.3)' };
+        case 'workspace':
+          return { text: 'Workspace File', bg: 'rgba(236, 72, 153, 0.15)', color: 'var(--color-primary)', border: 'rgba(236, 72, 153, 0.3)' };
+        case 'downloads':
+          return { text: 'Downloads Folder', bg: 'rgba(6, 182, 214, 0.15)', color: 'var(--color-accent)', border: 'rgba(6, 182, 214, 0.3)' };
+        default:
+          return { text: location, bg: 'rgba(255, 255, 255, 0.1)', color: '#fff', border: 'rgba(255, 255, 255, 0.2)' };
+      }
+    }
+
+    function loadDesigns() {
+      showLoading(true);
+      
+      // Get browser localStorage saves
+      let browserSaves = [];
+      try {
+        browserSaves = JSON.parse(localStorage.getItem('mendala_saves') || '[]');
+      } catch (e) {
+        console.error("Error reading localStorage saves:", e);
+      }
+      
+      // Get default presets as read-only gallery items
+      const presetDesigns = Object.keys(presets).map(key => {
+        const p = presets[key];
+        const strokeCount = p.layers.reduce((acc, l) => acc + l.strokes.length, 0);
+        return {
+          filename: `${key}.json`,
+          projectName: p.projectName,
+          layerCount: p.layers.length,
+          strokeCount: strokeCount,
+          sizeBytes: JSON.stringify(p).length,
+          modifiedTime: new Date(2026, 4, 30).toISOString(),
+          location: 'preset',
+          loadUrl: `preset:${key}`,
+          data: p
+        };
+      });
+
+      fetch('/api/designs')
+        .then(res => {
+          if (!res.ok) throw new Error('API server down');
+          return res.json();
+        })
+        .then(serverData => {
+          allDesigns = [...serverData, ...browserSaves, ...presetDesigns];
+          applyFilters();
+        })
+        .catch(err => {
+          console.warn('Backend server down/offline. Loading browser saves and presets only.', err);
+          allDesigns = [...browserSaves, ...presetDesigns];
+          applyFilters();
+        });
+    }
+
+    function showLoading(visible) {
+      document.getElementById('loading-spinner').style.display = visible ? 'flex' : 'none';
+      if (visible) {
+        document.getElementById('designs-grid').style.display = 'none';
+        document.getElementById('empty-state').style.display = 'none';
+      }
+    }
+
+    function applyFilters() {
+      showLoading(false);
+      
+      const query = document.getElementById('search-input').value.toLowerCase().trim();
+      const sortVal = document.getElementById('sort-select').value;
+      
+      // Filter
+      let filtered = allDesigns.filter(design => {
+        return design.projectName.toLowerCase().includes(query) || 
+               design.filename.toLowerCase().includes(query);
+      });
+
+      // Sort
+      if (sortVal === 'newest') {
+        filtered.sort((a, b) => new Date(b.modifiedTime) - new Date(a.modifiedTime));
+      } else if (sortVal === 'oldest') {
+        filtered.sort((a, b) => new Date(a.modifiedTime) - new Date(b.modifiedTime));
+      } else if (sortVal === 'complexity-desc') {
+        filtered.sort((a, b) => b.strokeCount - a.strokeCount);
+      } else if (sortVal === 'complexity-asc') {
+        filtered.sort((a, b) => a.strokeCount - b.strokeCount);
+      }
+
+      renderGrid(filtered);
+    }
+
+    function renderGrid(designs) {
+      const grid = document.getElementById('designs-grid');
+      const empty = document.getElementById('empty-state');
+      
+      grid.innerHTML = '';
+      
+      if (designs.length === 0) {
+        grid.style.display = 'none';
+        empty.style.display = 'flex';
+        return;
+      }
+
+      grid.style.display = 'grid';
+      empty.style.display = 'none';
+
+      designs.forEach(design => {
+        const card = document.createElement('div');
+        card.className = 'design-card';
+        
+        const dateStr = new Date(design.modifiedTime).toLocaleString(undefined, {
+          dateStyle: 'medium',
+          timeStyle: 'short'
+        });
+        
+        const kbSize = (design.sizeBytes / 1024).toFixed(1);
+        const badge = getBadgeDetails(design.location);
+
+        const deleteButton = design.location === 'preset' ? 
+          `<button class="btn btn-secondary" disabled style="opacity: 0.25; cursor: not-allowed;" title="Cannot delete featured templates">
+             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+               <polyline points="3 6 5 6 21 6"></polyline>
+               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+             </svg>
+           </button>` :
+          `<button class="btn btn-danger" onclick="deleteDesign('${design.location}', '${encodeURIComponent(design.filename)}')">
+             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+               <polyline points="3 6 5 6 21 6"></polyline>
+               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+               <line x1="10" y1="11" x2="10" y2="17"></line>
+               <line x1="14" y1="11" x2="14" y2="17"></line>
+             </svg>
+           </button>`;
+
+        card.innerHTML = `
+          <div class="card-header">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+              <div class="design-title" title="${escapeHTML(design.projectName)}" style="flex: 1;">${escapeHTML(design.projectName.replace(/_/g, ' '))}</div>
+              <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background-color: ${badge.bg}; color: ${badge.color}; border: 1px solid ${badge.border};">
+                ${badge.text}
+              </span>
+            </div>
+            <div class="design-date">${dateStr}</div>
+          </div>
+          <div class="thumbnail-container" onclick="location.href='index.html?load=${encodeURIComponent(design.loadUrl)}'">
+            <canvas class="thumbnail-canvas" id="canvas-${design.location}_${design.filename.replace(/[^a-zA-Z0-9]/g, '_')}" width="300" height="300"></canvas>
+          </div>
+          <div class="card-info">
+            <div class="info-item">
+              <span class="info-val">${design.layerCount}</span>
+              <span>Layers</span>
+            </div>
+            <div class="info-item">
+              <span class="info-val">${design.strokeCount}</span>
+              <span>Strokes</span>
+            </div>
+            <div class="info-item">
+              <span class="info-val">${kbSize} KB</span>
+              <span>File Size</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <a href="index.html?load=${encodeURIComponent(design.loadUrl)}" class="btn btn-primary" style="flex: 1;">Open</a>
+            <button class="btn btn-secondary" onclick="downloadJSON('${design.location}', '${encodeURIComponent(design.filename)}')">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+              </svg>
+            </button>
+            ${deleteButton}
+          </div>
+        `;
+        
+        grid.appendChild(card);
+        
+        // Draw preview thumbnail
+        const canvasId = `canvas-${design.location}_${design.filename.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        setTimeout(() => drawThumbnail(canvasId, design.data), 10);
+      });
+    }
+
+    function drawThumbnail(canvasId, designData) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width;
+      const H = canvas.height;
+      
+      // Dark canvas background
+      ctx.fillStyle = '#05080f';
+      ctx.fillRect(0, 0, W, H);
+      
+      if (!designData || !Array.isArray(designData.layers)) return;
+      
+      ctx.save();
+      ctx.translate(W / 2, H / 2); // Center origin
+      
+      const scale = W / 1000;
+      
+      designData.layers.forEach(layer => {
+        if (layer.visible === false || !Array.isArray(layer.strokes)) return;
+        
+        const S = layer.symmetry || 12;
+        const mirror = layer.mirror !== undefined ? layer.mirror : true;
+        const brushSize = Math.max(1, (layer.brushSize || 0.5) * 10 * scale);
+        
+        ctx.strokeStyle = layer.brushColor || '#ec4899';
+        ctx.fillStyle = layer.brushColor || '#ec4899';
+        ctx.lineWidth = brushSize;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        layer.strokes.forEach(stroke => {
+          for (let i = 0; i < S; i++) {
+            const angle = (i * Math.PI * 2) / S;
+            
+            ctx.save();
+            ctx.rotate(angle);
+            drawStrokePath(ctx, stroke, scale);
+            ctx.restore();
+            
+            if (mirror && S > 1) {
+              ctx.save();
+              ctx.rotate(angle);
+              ctx.scale(1, -1);
+              drawStrokePath(ctx, stroke, scale);
+              ctx.restore();
+            }
+          }
+        });
+      });
+      
+      ctx.restore();
+    }
+
+    function drawStrokePath(ctx, stroke, scale) {
+      ctx.beginPath();
+      
+      if (stroke.type === 'freehand') {
+        if (!stroke.points || stroke.points.length === 0) return;
+        if (stroke.points.length === 1) {
+          const pt = stroke.points[0];
+          ctx.arc(pt.x * scale, pt.y * scale, ctx.lineWidth / 2, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.moveTo(stroke.points[0].x * scale, stroke.points[0].y * scale);
+          for (let i = 1; i < stroke.points.length; i++) {
+            ctx.lineTo(stroke.points[i].x * scale, stroke.points[i].y * scale);
+          }
+          ctx.stroke();
+        }
+      } else if (stroke.type === 'line') {
+        ctx.moveTo(stroke.x1 * scale, stroke.y1 * scale);
+        ctx.lineTo(stroke.x2 * scale, stroke.y2 * scale);
+        ctx.stroke();
+      } else if (stroke.type === 'circle') {
+        ctx.arc(stroke.cx * scale, stroke.cy * scale, stroke.r * scale, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (stroke.type === 'polygon') {
+        const sides = stroke.sides || 5;
+        const r = stroke.r * scale;
+        const cx = stroke.cx * scale;
+        const cy = stroke.cy * scale;
+        const angle = stroke.angle || 0;
+        
+        for (let j = 0; j <= sides; j++) {
+          const polyAngle = angle + (j * Math.PI * 2) / sides;
+          const px = cx + Math.cos(polyAngle) * r;
+          const py = cy + Math.sin(polyAngle) * r;
+          if (j === 0) {
+            ctx.moveTo(px, py);
+          } else {
+            ctx.lineTo(px, py);
+          }
+        }
+        ctx.stroke();
+      }
+    }
+
+    function downloadJSON(location, filename) {
+      const decoded = decodeURIComponent(filename);
+      const design = allDesigns.find(d => d.filename === decoded && d.location === location);
+      if (!design) return;
+      
+      const json = JSON.stringify(design.data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = decoded;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function deleteDesign(location, filename) {
+      const decoded = decodeURIComponent(filename);
+      if (location === 'preset') return;
+      
+      if (confirm(`Are you sure you want to permanently delete "${decoded.replace('local_', '').replace('.json', '')}" from your ${location === 'browser' ? 'browser gallery' : location + ' folder'}?`)) {
+        if (location === 'browser') {
+          try {
+            let saves = JSON.parse(localStorage.getItem('mendala_saves') || '[]');
+            saves = saves.filter(s => s.filename !== decoded);
+            localStorage.setItem('mendala_saves', JSON.stringify(saves));
+            
+            allDesigns = allDesigns.filter(d => !(d.filename === decoded && d.location === 'browser'));
+            applyFilters();
+          } catch (e) {
+            alert('Failed to delete local save: ' + e.message);
+          }
+        } else {
+          fetch(`/api/designs/${location}/${filename}`, {
+            method: 'DELETE'
+          })
+          .then(res => res.json())
+          .then(result => {
+            if (result.success) {
+              allDesigns = allDesigns.filter(d => !(d.filename === decoded && d.location === location));
+              applyFilters();
+            } else {
+              alert('Failed to delete file: ' + (result.error || 'Unknown error'));
+            }
+          })
+          .catch(err => {
+            console.error('Error deleting file:', err);
+            alert('Error communicating with server');
+          });
+        }
+      }
+    }
+
+    // Expose functions to global scope for inline onclick template handlers
+    window.downloadJSON = downloadJSON;
+    window.deleteDesign = deleteDesign;
+  </script>
+</body>
+</html>

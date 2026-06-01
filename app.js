@@ -3,6 +3,7 @@
 import { Mandala, smoothPoints } from './mandala.js';
 import { Preview3D } from './preview3d.js';
 import { generateRandomName } from './namegenerator.js';
+import { presets } from './presets.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Core State
@@ -36,6 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnImportJSON = document.getElementById('btn-import');
   const btnExportJSON = document.getElementById('btn-export-json');
   const fileImportInput = document.getElementById('import-file');
+  const btnSaveLocal = document.getElementById('btn-save-local');
+  const btnShare = document.getElementById('btn-share');
   
   // Zoom Controls
   const btnZoomIn = document.getElementById('btn-zoom-in');
@@ -62,8 +65,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Sidebar Tabs
   const tabLayers = document.getElementById('tab-layers');
   const tab3D = document.getElementById('tab-3d');
+  const tabPresets = document.getElementById('tab-presets');
   const paneLayers = document.getElementById('tab-content-layers');
   const pane3D = document.getElementById('tab-content-3d');
+  const panePresets = document.getElementById('tab-content-presets');
+  const presetsList = document.getElementById('presets-list');
   
   // Active Layer Details panel
   const layerSymmetrySlider = document.getElementById('layer-symmetry');
@@ -123,6 +129,108 @@ document.addEventListener('DOMContentLoaded', () => {
     syncSlidersWithActiveLayer();
     drawAll();
     update3DPreview();
+    renderPresetsList();
+
+    // Check for load/code query parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // 1. Check for shared compressed code parameter
+    const codeParam = urlParams.get('code');
+    if (codeParam) {
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+      
+      showLoader(true);
+      decompressFromBase64(codeParam)
+        .then(jsonText => {
+          const success = mandala.loadFromJSON(jsonText);
+          if (success) {
+            if (mandala.loadedProjectName) {
+              projectNameInput.value = mandala.loadedProjectName;
+            }
+            updateLayerListUI();
+            syncSlidersWithActiveLayer();
+            drawAll();
+            update3DPreview();
+            updateUndoRedoButtons();
+            showToast("Shared design loaded successfully!", "success");
+          } else {
+            showToast("Failed to parse shared design.", "error");
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          showToast("Error decoding shared design.", "error");
+        })
+        .finally(() => {
+          showLoader(false);
+        });
+      return;
+    }
+
+    // 2. Check for normal load query parameter (server files, local saves, presets)
+    const loadFilename = urlParams.get('load');
+    if (loadFilename) {
+      // Remove parameter from URL
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+      
+      if (loadFilename.startsWith('local:')) {
+        const key = loadFilename.replace('local:', '');
+        try {
+          const saves = JSON.parse(localStorage.getItem('mendala_saves') || '[]');
+          const found = saves.find(s => s.filename === key);
+          if (found) {
+            loadDesignFromObject(found.data);
+            showToast(`Loaded save: ${found.projectName.replace(/_/g, ' ')}`, "success");
+          } else {
+            showToast("Saved design not found.", "error");
+          }
+        } catch (e) {
+          showToast("Failed to load local save.", "error");
+        }
+      } else if (loadFilename.startsWith('preset:')) {
+        const presetKey = loadFilename.replace('preset:', '');
+        const preset = presets[presetKey];
+        if (preset) {
+          loadDesignFromObject(preset);
+          showToast(`Loaded template: ${preset.projectName.replace(/_/g, ' ')}`, "success");
+        } else {
+          showToast("Preset template not found.", "error");
+        }
+      } else {
+        // Fetch design from server and load it
+        showLoader(true);
+        fetch(loadFilename)
+          .then(res => {
+            if (!res.ok) throw new Error('File not found on server');
+            return res.text();
+          })
+          .then(jsonText => {
+            const success = mandala.loadFromJSON(jsonText);
+            if (success) {
+              if (mandala.loadedProjectName) {
+                projectNameInput.value = mandala.loadedProjectName;
+              }
+              updateLayerListUI();
+              syncSlidersWithActiveLayer();
+              drawAll();
+              update3DPreview();
+              updateUndoRedoButtons();
+              showToast("Design loaded from server.", "success");
+            } else {
+              showToast("Failed to parse server design.", "error");
+            }
+          })
+          .catch(err => {
+            console.error('Error loading design from server:', err);
+            showToast('Could not load design: ' + err.message, "error");
+          })
+          .finally(() => {
+            showLoader(false);
+          });
+      }
+    }
   }
 
   // --- Drawing Event Listeners ---
@@ -584,15 +692,31 @@ document.addEventListener('DOMContentLoaded', () => {
     tabLayers.addEventListener('click', () => {
       tabLayers.classList.add('active');
       tab3D.classList.remove('active');
+      tabPresets.classList.remove('active');
+      
       paneLayers.classList.add('active');
       pane3D.classList.remove('active');
+      panePresets.classList.remove('active');
     });
     
     tab3D.addEventListener('click', () => {
       tab3D.classList.add('active');
       tabLayers.classList.remove('active');
+      tabPresets.classList.remove('active');
+      
       pane3D.classList.add('active');
       paneLayers.classList.remove('active');
+      panePresets.classList.remove('active');
+    });
+
+    tabPresets.addEventListener('click', () => {
+      tabPresets.classList.add('active');
+      tabLayers.classList.remove('active');
+      tab3D.classList.remove('active');
+      
+      panePresets.classList.add('active');
+      paneLayers.classList.remove('active');
+      pane3D.classList.remove('active');
     });
 
     // Layer Sliders Binding
@@ -662,7 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const defaultColors = ['#ec4899', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ffffff'];
       const nextColor = defaultColors[numLayers % defaultColors.length];
       
-      mandala.addLayer(`Layer ${numLayers + 1}`, 12, nextColor);
+      mandala.addLayer(`Layer ${numLayers + 1}`, 8, nextColor);
       updateLayerListUI();
       syncSlidersWithActiveLayer();
       drawAll();
@@ -816,6 +940,64 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Save to browser LocalStorage gallery
+    btnSaveLocal.addEventListener('click', () => {
+      const projectName = projectNameInput.value.trim() || 'my_mendala';
+      const designData = JSON.parse(mandala.exportToJSON(projectName));
+      
+      const newSave = {
+        filename: `local_${Date.now()}.json`,
+        projectName: projectName,
+        layerCount: mandala.layers.length,
+        strokeCount: mandala.layers.reduce((acc, l) => acc + l.strokes.length, 0),
+        sizeBytes: JSON.stringify(designData).length,
+        modifiedTime: new Date().toISOString(),
+        location: 'browser',
+        loadUrl: `local:local_${Date.now()}.json`,
+        data: designData
+      };
+      
+      try {
+        const saves = JSON.parse(localStorage.getItem('mendala_saves') || '[]');
+        
+        // Overwrite if same project name exists
+        const existingIdx = saves.findIndex(s => s.projectName === projectName);
+        if (existingIdx !== -1) {
+          newSave.filename = saves[existingIdx].filename;
+          newSave.loadUrl = `local:${newSave.filename}`;
+          saves[existingIdx] = newSave;
+        } else {
+          saves.push(newSave);
+        }
+        
+        localStorage.setItem('mendala_saves', JSON.stringify(saves));
+        showToast(`Saved "${projectName.replace(/_/g, ' ')}" to browser gallery!`, 'success');
+      } catch (err) {
+        console.error(err);
+        showToast("Storage full or unavailable. Could not save design.", 'error');
+      }
+    });
+
+    // Share design via GZIP compressed URL link
+    btnShare.addEventListener('click', async () => {
+      const projectName = projectNameInput.value.trim() || 'shared_mendala';
+      const json = mandala.exportToJSON(projectName);
+      
+      showLoader(true);
+      try {
+        const compressed = await compressToBase64(json);
+        const shareUrl = `${window.location.origin}${window.location.pathname}?code=${compressed}`;
+        
+        await navigator.clipboard.writeText(shareUrl);
+        showToast("Shareable link copied to clipboard!", "success");
+      } catch (err) {
+        console.error(err);
+        showToast("Failed to generate share link.", "error");
+      } finally {
+        showLoader(false);
+      }
+    });
+
     updateUndoRedoButtons();
   }
 
@@ -844,7 +1026,7 @@ document.addEventListener('DOMContentLoaded', () => {
       layerItem.innerHTML = `
         <div class="layer-item-meta">
           <div class="layer-color-dot" style="background-color: ${layer.brushColor}; color: ${layer.brushColor}"></div>
-          <span class="layer-name">${layer.name}</span>
+          <span class="layer-name">${escapeHTML(layer.name)}</span>
           <span class="layer-symmetry-badge">${layer.symmetry}x</span>
         </div>
         <div class="layer-actions">
@@ -1104,6 +1286,235 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     }
     return false;
+  }
+
+  // --- Helper Functions for Productionalization ---
+
+  // HTML escaping helper to prevent DOM XSS vulnerabilities
+  function escapeHTML(str) {
+    if (!str) return '';
+    return str.replace(/[&<>"']/g, m => {
+      const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+      return map[m];
+    });
+  }
+
+  // Compression helpers using browser's CompressionStream
+  async function compressToBase64(str) {
+    try {
+      const stream = new Blob([str]).stream();
+      const compressedStream = stream.pipeThrough(new CompressionStream('gzip'));
+      const response = new Response(compressedStream);
+      const buffer = await response.arrayBuffer();
+      return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+    } catch (e) {
+      console.warn("CompressionStream failed, falling back to simple base64", e);
+      return btoa(unescape(encodeURIComponent(str)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+    }
+  }
+
+  async function decompressFromBase64(base64) {
+    try {
+      let str = base64.replace(/-/g, '+').replace(/_/g, '/');
+      while (str.length % 4) str += '=';
+      const binary = atob(str);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const stream = new Blob([bytes]).stream();
+      const decompressedStream = stream.pipeThrough(new DecompressionStream('gzip'));
+      const response = new Response(decompressedStream);
+      return await response.text();
+    } catch (e) {
+      console.warn("DecompressionStream failed, trying raw base64 decode", e);
+      let str = base64.replace(/-/g, '+').replace(/_/g, '/');
+      while (str.length % 4) str += '=';
+      return decodeURIComponent(escape(atob(str)));
+    }
+  }
+
+  // Toast notifications manager
+  function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    
+    // Clear any existing toasts to prevent stacking overload
+    if (container.children.length >= 3) {
+      container.children[0].remove();
+    }
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    let iconSvg = '';
+    if (type === 'success') {
+      iconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+    } else if (type === 'error') {
+      iconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+    } else {
+      iconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`;
+    }
+    
+    toast.innerHTML = `
+      <div class="toast-icon ${type}">${iconSvg}</div>
+      <div class="toast-message">${message}</div>
+    `;
+    
+    container.appendChild(toast);
+    
+    // Remove toast after animation completes (4 seconds total)
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.remove();
+      }
+    }, 4000);
+  }
+
+  // Render presets in sidebar list
+  function renderPresetsList() {
+    if (!presetsList) return;
+    presetsList.innerHTML = '';
+    
+    Object.keys(presets).forEach(key => {
+      const preset = presets[key];
+      const card = document.createElement('div');
+      card.className = 'preset-card';
+      
+      const totalStrokes = preset.layers.reduce((acc, l) => acc + l.strokes.length, 0);
+      
+      card.innerHTML = `
+        <div class="preset-card-header">
+          <span class="preset-title">${preset.projectName.replace(/_/g, ' ').toUpperCase()}</span>
+          <span class="preset-badge">Template</span>
+        </div>
+        <div class="preset-preview-mini">
+          <canvas class="preset-thumbnail-canvas" id="preset-canvas-${key}" width="160" height="160"></canvas>
+        </div>
+        <div class="preset-card-details">
+          <div class="preset-detail-item">
+            <strong>Layers:</strong> ${preset.layers.length}
+          </div>
+          <div class="preset-detail-item">
+            <strong>Symmetry:</strong> ${preset.layers[0].symmetry}x
+          </div>
+          <div class="preset-detail-item">
+            <strong>Strokes:</strong> ${totalStrokes}
+          </div>
+        </div>
+      `;
+      
+      card.addEventListener('click', () => {
+        if (confirm(`Load "${preset.projectName.replace(/_/g, ' ')}" preset? This will overwrite your current active canvas.`)) {
+          loadDesignFromObject(preset);
+          showToast(`Loaded preset: ${preset.projectName.replace(/_/g, ' ')}`, 'success');
+          // Switch to layers tab so they can inspect/edit it
+          tabLayers.click();
+        }
+      });
+      
+      presetsList.appendChild(card);
+      
+      // Render visual preview thumbnail
+      setTimeout(() => drawPresetThumbnail(`preset-canvas-${key}`, preset), 10);
+    });
+  }
+
+  // Render a mini 2D thumbnail preview of preset
+  function drawPresetThumbnail(canvasId, presetData) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+    
+    ctx.fillStyle = '#030509';
+    ctx.fillRect(0, 0, W, H);
+    
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+    const scale = W / 1000;
+    
+    presetData.layers.forEach(layer => {
+      const S = layer.symmetry || 12;
+      const mirror = layer.mirror !== undefined ? layer.mirror : true;
+      const brushSize = Math.max(1.5, (layer.brushSize || 0.5) * 10 * scale);
+      
+      ctx.strokeStyle = layer.brushColor || '#ec4899';
+      ctx.fillStyle = layer.brushColor || '#ec4899';
+      ctx.lineWidth = brushSize;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      
+      layer.strokes.forEach(stroke => {
+        for (let i = 0; i < S; i++) {
+          const angle = (i * Math.PI * 2) / S;
+          
+          ctx.save();
+          ctx.rotate(angle);
+          drawPresetStrokePath(ctx, stroke, scale);
+          ctx.restore();
+          
+          if (mirror && S > 1) {
+            ctx.save();
+            ctx.rotate(angle);
+            ctx.scale(1, -1);
+            drawPresetStrokePath(ctx, stroke, scale);
+            ctx.restore();
+          }
+        }
+      });
+    });
+    
+    ctx.restore();
+  }
+
+  function drawPresetStrokePath(ctx, stroke, scale) {
+    ctx.beginPath();
+    if (stroke.type === 'circle') {
+      ctx.arc(stroke.cx * scale, stroke.cy * scale, stroke.r * scale, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (stroke.type === 'line') {
+      ctx.moveTo(stroke.x1 * scale, stroke.y1 * scale);
+      ctx.lineTo(stroke.x2 * scale, stroke.y2 * scale);
+      ctx.stroke();
+    } else if (stroke.type === 'polygon') {
+      const sides = stroke.sides || 5;
+      const r = stroke.r * scale;
+      const cx = stroke.cx * scale;
+      const cy = stroke.cy * scale;
+      const angle = stroke.angle || 0;
+      for (let j = 0; j <= sides; j++) {
+        const polyAngle = angle + (j * Math.PI * 2) / sides;
+        const px = cx + Math.cos(polyAngle) * r;
+        const py = cy + Math.sin(polyAngle) * r;
+        if (j === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
+  }
+
+  // Load a full design from state object
+  function loadDesignFromObject(designObj) {
+    const success = mandala.loadFromJSON(JSON.stringify(designObj));
+    if (success) {
+      if (mandala.loadedProjectName) {
+        projectNameInput.value = mandala.loadedProjectName;
+      }
+      updateLayerListUI();
+      syncSlidersWithActiveLayer();
+      drawAll();
+      update3DPreview();
+      updateUndoRedoButtons();
+    }
+    return success;
   }
 
   // Run initializations
