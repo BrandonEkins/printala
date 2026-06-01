@@ -1374,11 +1374,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
       
-      // Base plate shape = Circular Disk
+      // Base plate shape = Conforming (Solid fill)
       const baseTypeSelect = document.getElementById('base-type');
       if (baseTypeSelect) {
-        baseTypeSelect.value = 'circle';
+        baseTypeSelect.value = 'conforming-solid';
         baseTypeSelect.dispatchEvent(new Event('change'));
+      }
+      
+      // Base thickness = 0.5 mm
+      const baseThicknessSlider = document.getElementById('base-thickness');
+      if (baseThicknessSlider) {
+        baseThicknessSlider.value = 0.5;
+        const valBaseThickness = document.getElementById('val-base-thickness');
+        if (valBaseThickness) valBaseThickness.textContent = '0.5 mm';
       }
       
       // Hanging hole = true

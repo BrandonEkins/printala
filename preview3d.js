@@ -829,14 +829,42 @@ export class Preview3D {
         const drawnPoints = this.getDrawnPoints(mandala, scaleFactor);
         
         drawnPoints.forEach(pt => {
-          const dist = Math.sqrt(pt.x * pt.x + pt.y * pt.y);
-          const r = dist + pt.halfBrush;
-          let angle = Math.atan2(pt.y, pt.x);
-          if (angle < 0) angle += Math.PI * 2;
+          const d2 = pt.x * pt.x + pt.y * pt.y;
+          const dist = Math.sqrt(d2);
+          const r_b = pt.halfBrush;
           
-          const bin = Math.floor((angle / (Math.PI * 2)) * numBins) % numBins;
-          if (r > r_samples[bin]) {
-            r_samples[bin] = r;
+          let angleCenter = Math.atan2(pt.y, pt.x);
+          if (angleCenter < 0) angleCenter += Math.PI * 2;
+          
+          let angLimit = Math.PI; // default if origin is inside brush
+          if (dist > r_b) {
+            angLimit = Math.asin(r_b / dist);
+          }
+          
+          // Project the circular brush radius onto all intersecting angular bins
+          for (let b = 0; b < numBins; b++) {
+            const phi = (b * Math.PI * 2) / numBins;
+            
+            // Check if phi is within the angular footprint of the brush circle
+            let diff = phi - angleCenter;
+            diff = Math.atan2(Math.sin(diff), Math.cos(diff)); // normalize diff to [-PI, PI]
+            
+            if (Math.abs(diff) <= angLimit) {
+              let t = r_b; // if dist is 0
+              if (dist > 0) {
+                const projection = pt.x * Math.cos(phi) + pt.y * Math.sin(phi);
+                const disc = projection * projection - (d2 - r_b * r_b);
+                if (disc >= 0) {
+                  t = projection + Math.sqrt(disc);
+                } else {
+                  t = dist + r_b; // fallback
+                }
+              }
+              
+              if (t > r_samples[b]) {
+                r_samples[b] = t;
+              }
+            }
           }
         });
         
