@@ -344,11 +344,10 @@ button {
 /* 2D Canvas viewport */
 .canvas-viewport {
   flex: 1;
+  min-height: 0; /* Allow the flex item to shrink below content size under browser zoom */
   position: relative;
   overflow: auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
   background-color: #04060b;
   cursor: crosshair;
 }
@@ -375,6 +374,7 @@ button {
   height: 1000px;
   min-width: 1000px;
   min-height: 1000px;
+  margin: auto; /* Centers the canvas securely on both axes while preserving full overflow scroll bounds */
   transform-origin: center center;
   transition: transform 0.15s ease-out;
 }
@@ -463,6 +463,7 @@ button {
 /* 3D Panel WebGL Preview */
 .webgl-container {
   flex: 1;
+  min-height: 0; /* Let WebGL container shrink, keeping bottom render info bar pinned inside screen bounds */
   background-color: #05080f;
   position: relative;
   width: 100%;
@@ -613,6 +614,7 @@ button {
 
 .sidebar-content {
   flex: 1;
+  min-height: 0; /* Let sidebar scroll internally instead of stretching whole container off-screen */
   overflow-y: auto;
   padding: 20px;
   display: flex;
