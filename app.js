@@ -64,10 +64,8 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Sidebar Tabs
   const tabLayers = document.getElementById('tab-layers');
-  const tab3D = document.getElementById('tab-3d');
   const tabPresets = document.getElementById('tab-presets');
   const paneLayers = document.getElementById('tab-content-layers');
-  const pane3D = document.getElementById('tab-content-3d');
   const panePresets = document.getElementById('tab-content-presets');
   const presetsList = document.getElementById('presets-list');
   
@@ -108,8 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const valBaseHoleDistance = document.getElementById('val-base-hole-distance');
   const baseHoleAngleSlider = document.getElementById('base-hole-angle');
   const valBaseHoleAngle = document.getElementById('val-base-hole-angle');
-  const selectMaterial = document.getElementById('render-material');
-  const chkShowBed = document.getElementById('chk-show-bed');
+  // Material / Bed visual options removed from UI
   const scaleSlider = document.getElementById('mandala-scale');
   const valScale = document.getElementById('val-mandala-scale');
   
@@ -691,32 +688,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // Sidebar Tab Switching
     tabLayers.addEventListener('click', () => {
       tabLayers.classList.add('active');
-      tab3D.classList.remove('active');
       tabPresets.classList.remove('active');
       
       paneLayers.classList.add('active');
-      pane3D.classList.remove('active');
-      panePresets.classList.remove('active');
-    });
-    
-    tab3D.addEventListener('click', () => {
-      tab3D.classList.add('active');
-      tabLayers.classList.remove('active');
-      tabPresets.classList.remove('active');
-      
-      pane3D.classList.add('active');
-      paneLayers.classList.remove('active');
       panePresets.classList.remove('active');
     });
 
     tabPresets.addEventListener('click', () => {
       tabPresets.classList.add('active');
       tabLayers.classList.remove('active');
-      tab3D.classList.remove('active');
       
       panePresets.classList.add('active');
       paneLayers.classList.remove('active');
-      pane3D.classList.remove('active');
     });
 
     // Layer Sliders Binding
@@ -884,13 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    selectMaterial.addEventListener('change', (e) => {
-      preview3D.setMaterial(e.target.value);
-    });
-
-    chkShowBed.addEventListener('change', (e) => {
-      preview3D.togglePrintBed(e.target.checked);
-    });
+    // Material and print bed options removed from sidebar menu
 
     scaleSlider.addEventListener('input', (e) => {
       valScale.textContent = e.target.value + ' mm';

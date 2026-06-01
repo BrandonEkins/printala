@@ -166,15 +166,14 @@
 
       <!-- Control Sidebar -->
       <aside class="workspace-sidebar">
-        <!-- Tab Navigation (Layers vs Settings vs Presets) -->
+        <!-- Tab Navigation (Combined Design & 3D Settings vs Presets) -->
         <div class="sidebar-tabs">
-          <button id="tab-layers" class="tab-btn active">Layers & Shapes</button>
-          <button id="tab-3d" class="tab-btn">3D & Material</button>
+          <button id="tab-layers" class="tab-btn active">Design & 3D</button>
           <button id="tab-presets" class="tab-btn">Presets</button>
         </div>
 
         <div class="sidebar-content">
-          <!-- Layers Tab Content -->
+          <!-- Design & 3D Settings Tab Content -->
           <div id="tab-content-layers" class="tab-pane active">
             <div class="section-card">
               <div class="section-title">
@@ -247,28 +246,7 @@
                 </div>
               </div>
             </div>
-            
-            <div class="section-card">
-              <h3>Canvas Helpers</h3>
-              <div class="control-row">
-                <label class="toggle-switch">
-                  <input type="checkbox" id="chk-show-guides" checked>
-                  <span class="toggle-slider"></span>
-                  Show Radial Slices
-                </label>
-              </div>
-              <div class="control-row">
-                <label class="toggle-switch">
-                  <input type="checkbox" id="chk-show-grid" checked>
-                  <span class="toggle-slider"></span>
-                  Show Concentric Grid
-                </label>
-              </div>
-            </div>
-          </div>
 
-          <!-- 3D settings Tab Content -->
-          <div id="tab-content-3d" class="tab-pane">
             <div class="section-card">
               <h3>3D Print Base Plate</h3>
               <p class="card-desc">Adds a solid layer at the bottom to connect all elements for 3D printing.</p>
@@ -350,33 +328,6 @@
             </div>
 
             <div class="section-card">
-              <h3>Preview Material & Render</h3>
-              
-              <div class="control-row">
-                <div class="control-label">
-                  <label for="render-material">Filament Style</label>
-                </div>
-                <select id="render-material" class="select-dropdown">
-                  <option value="matte-red">Matte Red PLA</option>
-                  <option value="silk-gold">Silk Gold Metal</option>
-                  <option value="neon-cyan">Translucent Cyan</option>
-                  <option value="glow-green">Glow-in-the-Dark Green</option>
-                  <option value="carbon">Carbon Fiber Black</option>
-                </select>
-              </div>
-              
-              <div class="control-row">
-                <div class="control-label">
-                  <label for="bed-visual">Show Printer Print Bed</label>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="chk-show-bed" checked>
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-            </div>
-
-            <div class="section-card">
               <h3>Design Dimensions</h3>
               <div class="control-row">
                 <div class="control-label">
@@ -384,6 +335,24 @@
                   <span id="val-mandala-scale">100 mm</span>
                 </div>
                 <input type="range" id="mandala-scale" min="50" max="300" value="100" step="10">
+              </div>
+            </div>
+
+            <div class="section-card">
+              <h3>Canvas Helpers</h3>
+              <div class="control-row">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="chk-show-guides" checked>
+                  <span class="toggle-slider"></span>
+                  Show Radial Slices
+                </label>
+              </div>
+              <div class="control-row">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="chk-show-grid" checked>
+                  <span class="toggle-slider"></span>
+                  Show Concentric Grid
+                </label>
               </div>
             </div>
           </div>
