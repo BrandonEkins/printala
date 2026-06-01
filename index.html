@@ -171,7 +171,14 @@
         <div class="sidebar-content">
           <!-- Design & 3D Settings Tab Content -->
           <div id="tab-content-layers" class="tab-pane active">
-            <div class="section-card">
+            <!-- Kid Mode Toggle Card -->
+            <div class="section-card kid-mode-toggle-card standard-only" style="background: linear-gradient(135deg, rgba(244, 63, 94, 0.08), rgba(236, 72, 153, 0.08)); border-color: rgba(244, 63, 94, 0.2); margin-bottom: 4px;">
+              <button id="btn-enter-kid" class="btn-primary btn-full" style="background: linear-gradient(135deg, #f43f5e, #ec4899); border: none; font-weight: 700; box-shadow: 0 4px 12px rgba(244, 63, 94, 0.2);">
+                🧸 Switch to Kid Mode
+              </button>
+            </div>
+
+            <div class="section-card standard-only">
               <div class="section-title">
                 <h3>Design Layers</h3>
                 <button id="btn-add-layer" class="btn-primary btn-small" title="Add New Layer">
@@ -184,7 +191,7 @@
               </div>
             </div>
 
-            <div class="section-card" id="layer-details-card">
+            <div class="section-card standard-only" id="layer-details-card">
               <h3 class="section-header">Active Layer Settings</h3>
               
               <div class="control-row">
@@ -243,7 +250,7 @@
               </div>
             </div>
 
-            <div class="section-card">
+            <div class="section-card standard-only">
               <h3>3D Print Base Plate</h3>
               <p class="card-desc">Adds a solid layer at the bottom to connect all elements for 3D printing.</p>
               
@@ -323,7 +330,7 @@
               </div>
             </div>
 
-            <div class="section-card">
+            <div class="section-card standard-only">
               <h3>Design Dimensions</h3>
               <div class="control-row">
                 <div class="control-label">
@@ -334,7 +341,7 @@
               </div>
             </div>
 
-            <div class="section-card">
+            <div class="section-card standard-only">
               <h3>Canvas Helpers</h3>
               <div class="control-row">
                 <label class="toggle-switch">
@@ -349,6 +356,68 @@
                   <span class="toggle-slider"></span>
                   Show Concentric Grid
                 </label>
+              </div>
+            </div>
+
+            <!-- Kid Mode Panel (visible only in kid mode) -->
+            <div class="kid-only" style="display: none; flex-direction: column; gap: 20px; width: 100%;">
+              <!-- Back to Normal button -->
+              <button id="btn-exit-kid" class="btn-secondary btn-full" style="border-color: rgba(255, 255, 255, 0.15); height: 42px; font-weight: 600;">
+                ⚙️ Back to Designer
+              </button>
+
+              <!-- Shapes Card -->
+              <div class="section-card">
+                <h3 style="font-size: 15px;">🎨 Choose a Shape</h3>
+                <div class="kid-shapes-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                  <button id="kid-tool-freehand" class="btn-tool active" style="height: 64px; font-size: 15px; flex-direction: column; gap: 6px; padding: 10px;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    Freehand
+                  </button>
+                  <button id="kid-tool-line" class="btn-tool" style="height: 64px; font-size: 15px; flex-direction: column; gap: 6px; padding: 10px;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="19" x2="19" y2="5"/></svg>
+                    Line
+                  </button>
+                  <button id="kid-tool-circle" class="btn-tool" style="height: 64px; font-size: 15px; flex-direction: column; gap: 6px; padding: 10px;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9"/></svg>
+                    Circle
+                  </button>
+                  <button id="kid-tool-polygon" class="btn-tool" style="height: 64px; font-size: 15px; flex-direction: column; gap: 6px; padding: 10px;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/></svg>
+                    Polygon
+                  </button>
+                </div>
+              </div>
+
+              <!-- Colors Card -->
+              <div class="section-card">
+                <h3 style="font-size: 15px;">🌈 Choose a Color</h3>
+                <div class="kid-colors-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 4px; justify-items: center;">
+                  <div class="color-swatch active" style="background-color: #ec4899; width: 38px; height: 38px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform var(--transition-fast);" data-color="#ec4899"></div>
+                  <div class="color-swatch" style="background-color: #3b82f6; width: 38px; height: 38px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform var(--transition-fast);" data-color="#3b82f6"></div>
+                  <div class="color-swatch" style="background-color: #10b981; width: 38px; height: 38px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform var(--transition-fast);" data-color="#10b981"></div>
+                  <div class="color-swatch" style="background-color: #f59e0b; width: 38px; height: 38px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform var(--transition-fast);" data-color="#f59e0b"></div>
+                  <div class="color-swatch" style="background-color: #8b5cf6; width: 38px; height: 38px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform var(--transition-fast);" data-color="#8b5cf6"></div>
+                  <div class="color-swatch" style="background-color: #ef4444; width: 38px; height: 38px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform var(--transition-fast);" data-color="#ef4444"></div>
+                  <div class="color-swatch" style="background-color: #06b6d4; width: 38px; height: 38px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform var(--transition-fast);" data-color="#06b6d4"></div>
+                  <div class="color-swatch" style="background-color: #ffffff; width: 38px; height: 38px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; transition: transform var(--transition-fast);" data-color="#ffffff"></div>
+                </div>
+              </div>
+
+              <!-- Actions Card -->
+              <div class="section-card">
+                <h3 style="font-size: 15px;">🚀 Actions</h3>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                  <button id="kid-btn-save" class="btn-primary btn-full" style="height: 48px; font-size: 15px; font-weight: 700; background: linear-gradient(135deg, #10b981, #059669); border: none; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);">
+                    💾 Save to Gallery
+                  </button>
+                  <button id="kid-btn-clear" class="btn-secondary btn-full" style="height: 48px; font-size: 15px; font-weight: 700; border-color: rgba(239, 68, 68, 0.3); color: #ef4444; background: rgba(239, 68, 68, 0.05);">
+                    🗑️ Clear Drawing
+                  </button>
+                  <a href="gallery.html" class="btn-secondary btn-full" style="height: 48px; font-size: 15px; font-weight: 700; border-color: var(--border-color); text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                    🖼️ Go to Gallery
+                  </a>
+                </div>
               </div>
             </div>
           </div>

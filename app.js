@@ -117,6 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
     projectNameInput.value = generateRandomName();
     setupDrawingEvents();
     setupUIControls();
+    setupKidMode();
     updateLayerListUI();
     syncSlidersWithActiveLayer();
     drawAll();
@@ -1350,6 +1351,129 @@ document.addEventListener('DOMContentLoaded', () => {
       updateUndoRedoButtons();
     }
     return success;
+  }
+
+  // --- Kid Mode Interactivity ---
+  function setupKidMode() {
+    const btnEnterKid = document.getElementById('btn-enter-kid');
+    const btnExitKid = document.getElementById('btn-exit-kid');
+
+    if (!btnEnterKid || !btnExitKid) return;
+
+    // Enter Kid Mode
+    btnEnterKid.addEventListener('click', () => {
+      document.body.classList.add('kid-mode-active');
+      
+      // Set defaults: 8 radial symmetry
+      const activeLayer = mandala.getActiveLayer();
+      if (activeLayer) {
+        activeLayer.symmetry = 8;
+        if (layerSymmetrySlider) {
+          layerSymmetrySlider.value = 8;
+          valLayerSymmetry.textContent = '8';
+        }
+      }
+      
+      // Base plate shape = Circular Disk
+      const baseTypeSelect = document.getElementById('base-type');
+      if (baseTypeSelect) {
+        baseTypeSelect.value = 'circle';
+        baseTypeSelect.dispatchEvent(new Event('change'));
+      }
+      
+      // Hanging hole = true
+      const chkBaseHoleSelect = document.getElementById('chk-base-hole');
+      if (chkBaseHoleSelect) {
+        chkBaseHoleSelect.checked = true;
+        chkBaseHoleSelect.dispatchEvent(new Event('change'));
+      }
+      
+      // Draw everything
+      drawAll();
+      updateLayerListUI();
+      update3DPreview();
+      showToast("Kid Mode active! 🧸 Have fun drawing!", "success");
+    });
+
+    // Exit Kid Mode
+    btnExitKid.addEventListener('click', () => {
+      document.body.classList.remove('kid-mode-active');
+      drawAll();
+      update3DPreview();
+      showToast("Returned to Designer Mode.", "info");
+    });
+
+    // Kid shapes selection
+    const kidShapes = {
+      'kid-tool-freehand': 'freehand',
+      'kid-tool-line': 'line',
+      'kid-tool-circle': 'circle',
+      'kid-tool-polygon': 'polygon'
+    };
+
+    Object.keys(kidShapes).forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.addEventListener('click', () => {
+          Object.keys(kidShapes).forEach(k => {
+            const el = document.getElementById(k);
+            if (el) el.classList.remove('active');
+          });
+          btn.classList.add('active');
+
+          const toolName = kidShapes[id];
+          const standardBtn = document.getElementById(`tool-${toolName}`);
+          if (standardBtn) {
+            standardBtn.click();
+          }
+        });
+      }
+    });
+
+    // Kid colors selection
+    const kidColors = document.querySelectorAll('.kid-colors-grid .color-swatch');
+    kidColors.forEach(swatch => {
+      swatch.addEventListener('click', () => {
+        kidColors.forEach(s => s.classList.remove('active'));
+        swatch.classList.add('active');
+
+        const color = swatch.getAttribute('data-color');
+        const activeLayer = mandala.getActiveLayer();
+        if (activeLayer) {
+          activeLayer.brushColor = color;
+          
+          const colorPicker = document.getElementById('layer-color');
+          if (colorPicker) {
+            colorPicker.value = color;
+            colorPicker.dispatchEvent(new Event('input'));
+          }
+          
+          updateLayerListUI();
+        }
+      });
+    });
+
+    // Kid Action: Save
+    const kidBtnSave = document.getElementById('kid-btn-save');
+    if (kidBtnSave) {
+      kidBtnSave.addEventListener('click', () => {
+        const standardSave = document.getElementById('btn-save-local');
+        if (standardSave) {
+          standardSave.click();
+        }
+      });
+    }
+
+    // Kid Action: Clear
+    const kidBtnClear = document.getElementById('kid-btn-clear');
+    if (kidBtnClear) {
+      kidBtnClear.addEventListener('click', () => {
+        const standardClear = document.getElementById('btn-clear');
+        if (standardClear) {
+          standardClear.click();
+        }
+      });
+    }
   }
 
   // Run initializations
