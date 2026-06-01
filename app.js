@@ -62,12 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnResetCamera = document.getElementById('btn-reset-camera');
   const chkAutoRotate = document.getElementById('chk-auto-rotate');
   
-  // Sidebar Tabs
-  const tabLayers = document.getElementById('tab-layers');
-  const tabPresets = document.getElementById('tab-presets');
-  const paneLayers = document.getElementById('tab-content-layers');
-  const panePresets = document.getElementById('tab-content-presets');
-  const presetsList = document.getElementById('presets-list');
+  // Sidebar tab references removed (sidebar is now a single settings pane)
   
   // Active Layer Details panel
   const layerSymmetrySlider = document.getElementById('layer-symmetry');
@@ -126,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
     syncSlidersWithActiveLayer();
     drawAll();
     update3DPreview();
-    renderPresetsList();
+    // Presets list rendering removed
 
     // Check for load/code query parameters
     const urlParams = new URLSearchParams(window.location.search);
@@ -685,22 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chkShowGuides.addEventListener('change', () => drawAll());
     chkShowGrid.addEventListener('change', () => drawAll());
 
-    // Sidebar Tab Switching
-    tabLayers.addEventListener('click', () => {
-      tabLayers.classList.add('active');
-      tabPresets.classList.remove('active');
-      
-      paneLayers.classList.add('active');
-      panePresets.classList.remove('active');
-    });
-
-    tabPresets.addEventListener('click', () => {
-      tabPresets.classList.add('active');
-      tabLayers.classList.remove('active');
-      
-      panePresets.classList.add('active');
-      paneLayers.classList.remove('active');
-    });
+    // Sidebar tab switching removed
 
     // Layer Sliders Binding
     layerSymmetrySlider.addEventListener('input', (e) => {
@@ -1354,129 +1334,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 4000);
   }
 
-  // Render presets in sidebar list
-  function renderPresetsList() {
-    if (!presetsList) return;
-    presetsList.innerHTML = '';
-    
-    Object.keys(presets).forEach(key => {
-      const preset = presets[key];
-      const card = document.createElement('div');
-      card.className = 'preset-card';
-      
-      const totalStrokes = preset.layers.reduce((acc, l) => acc + l.strokes.length, 0);
-      
-      card.innerHTML = `
-        <div class="preset-card-header">
-          <span class="preset-title">${preset.projectName.replace(/_/g, ' ').toUpperCase()}</span>
-          <span class="preset-badge">Template</span>
-        </div>
-        <div class="preset-preview-mini">
-          <canvas class="preset-thumbnail-canvas" id="preset-canvas-${key}" width="160" height="160"></canvas>
-        </div>
-        <div class="preset-card-details">
-          <div class="preset-detail-item">
-            <strong>Layers:</strong> ${preset.layers.length}
-          </div>
-          <div class="preset-detail-item">
-            <strong>Symmetry:</strong> ${preset.layers[0].symmetry}x
-          </div>
-          <div class="preset-detail-item">
-            <strong>Strokes:</strong> ${totalStrokes}
-          </div>
-        </div>
-      `;
-      
-      card.addEventListener('click', () => {
-        if (confirm(`Load "${preset.projectName.replace(/_/g, ' ')}" preset? This will overwrite your current active canvas.`)) {
-          loadDesignFromObject(preset);
-          showToast(`Loaded preset: ${preset.projectName.replace(/_/g, ' ')}`, 'success');
-          // Switch to layers tab so they can inspect/edit it
-          tabLayers.click();
-        }
-      });
-      
-      presetsList.appendChild(card);
-      
-      // Render visual preview thumbnail
-      setTimeout(() => drawPresetThumbnail(`preset-canvas-${key}`, preset), 10);
-    });
-  }
-
-  // Render a mini 2D thumbnail preview of preset
-  function drawPresetThumbnail(canvasId, presetData) {
-    const canvas = document.getElementById(canvasId);
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width;
-    const H = canvas.height;
-    
-    ctx.fillStyle = '#030509';
-    ctx.fillRect(0, 0, W, H);
-    
-    ctx.save();
-    ctx.translate(W / 2, H / 2);
-    const scale = W / 1000;
-    
-    presetData.layers.forEach(layer => {
-      const S = layer.symmetry || 12;
-      const mirror = layer.mirror !== undefined ? layer.mirror : true;
-      const brushSize = Math.max(1.5, (layer.brushSize || 0.5) * 10 * scale);
-      
-      ctx.strokeStyle = layer.brushColor || '#ec4899';
-      ctx.fillStyle = layer.brushColor || '#ec4899';
-      ctx.lineWidth = brushSize;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      
-      layer.strokes.forEach(stroke => {
-        for (let i = 0; i < S; i++) {
-          const angle = (i * Math.PI * 2) / S;
-          
-          ctx.save();
-          ctx.rotate(angle);
-          drawPresetStrokePath(ctx, stroke, scale);
-          ctx.restore();
-          
-          if (mirror && S > 1) {
-            ctx.save();
-            ctx.rotate(angle);
-            ctx.scale(1, -1);
-            drawPresetStrokePath(ctx, stroke, scale);
-            ctx.restore();
-          }
-        }
-      });
-    });
-    
-    ctx.restore();
-  }
-
-  function drawPresetStrokePath(ctx, stroke, scale) {
-    ctx.beginPath();
-    if (stroke.type === 'circle') {
-      ctx.arc(stroke.cx * scale, stroke.cy * scale, stroke.r * scale, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (stroke.type === 'line') {
-      ctx.moveTo(stroke.x1 * scale, stroke.y1 * scale);
-      ctx.lineTo(stroke.x2 * scale, stroke.y2 * scale);
-      ctx.stroke();
-    } else if (stroke.type === 'polygon') {
-      const sides = stroke.sides || 5;
-      const r = stroke.r * scale;
-      const cx = stroke.cx * scale;
-      const cy = stroke.cy * scale;
-      const angle = stroke.angle || 0;
-      for (let j = 0; j <= sides; j++) {
-        const polyAngle = angle + (j * Math.PI * 2) / sides;
-        const px = cx + Math.cos(polyAngle) * r;
-        const py = cy + Math.sin(polyAngle) * r;
-        if (j === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
-    }
-  }
+  // Preset list helpers and render functions removed (presets are handled in gallery.html)
 
   // Load a full design from state object
   function loadDesignFromObject(designObj) {
