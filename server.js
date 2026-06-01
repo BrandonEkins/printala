@@ -237,7 +237,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`==================================================`);
-  console.log(` Mendala Server running at http://localhost:${PORT}`);
+  console.log(` Printdala Server running at http://localhost:${PORT}`);
   console.log(` View gallery dashboard at http://localhost:${PORT}/gallery`);
   console.log(`==================================================`);
 });
